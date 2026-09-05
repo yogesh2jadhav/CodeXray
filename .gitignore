@@ -13,3 +13,5 @@ data/cache/*
 .DS_Store
 node_modules/
 frontend/dist/
+
+data/eval/

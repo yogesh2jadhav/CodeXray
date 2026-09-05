@@ -103,7 +103,25 @@ Chat (`/ask` + evidence) · Agent (`/investigate` — plan, tool trace, evidence
 Dynamic SQL viewer (§52) · Architecture (§39) · Graph + impact (§41). Click any
 `file:line` to open the source panel, scrolled and highlighted (§50).
 
-Next sprints (eval framework, git, Spark) are tracked in `docs/SPRINTS.md`.
+## Status — Sprint 7 (Evaluation Framework) ✅
+
+`eval/` + `scripts/run_eval.py` — a ground-truth benchmark for guarding regressions
+and comparing local models (build plan §66-68).
+
+```bash
+python scripts/run_eval.py --project synthetic --mode retrieval               # deterministic, fast, model-free
+python scripts/run_eval.py --project synthetic --mode ask   --model qwen2.5-coder:7b
+python scripts/run_eval.py --project synthetic --mode agent --compare qwen2.5-coder:7b,qwen3:8b
+```
+
+- `eval/dataset/synthetic.yaml` — 60 cases across 7 categories, each with expected
+  evidence + structured facts + answer content + **forbidden** content
+- Metrics: retrieval / evidence / sql-resolution / dependency accuracy,
+  answer_correctness, label_adherence, **hallucination_rate**, latency
+- Baseline (`docs/EVAL_BASELINE.md`): 60/60, all deterministic metrics 1.00;
+  `qwen2.5-coder:7b` on dynamic-SQL cases → 0.00 hallucination
+
+Next sprints (git, Spark) are tracked in `docs/SPRINTS.md`.
 
 ## Quick start
 

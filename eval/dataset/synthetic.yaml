@@ -1,0 +1,323 @@
+# CodeXray evaluation dataset — synthetic-test-project (build plan §67).
+#
+# Ground-truth benchmark for comparing local models and guarding against
+# regressions. Each case lists the *expected evidence* (files, symbols, tables),
+# the expected structured facts (dynamic-SQL status, callers, impact), the
+# answer content that should appear, and — critically — content that must NOT
+# appear (anti-hallucination, §29/§66).
+#
+# Target size is ~100 (20 architecture / 20 java / 15 sql / 15 dynamic_sql /
+# 10 dependency / 10 impact / 10 debugging). This file is designed to grow;
+# add cases without touching the runner.
+
+cases:
+  # ---------------------------------------------------------------- ARCHITECTURE
+  - id: arch-01
+    category: architecture
+    question: Explain this project's architecture.
+    expect_evidence_symbols: [CustomerService, MetadataService, CustomerRepository]
+    expect_answer_substrings: [service, repository, metadata]
+  - id: arch-02
+    category: architecture
+    question: What are the layers of this application?
+    expect_answer_substrings: [data access, service]
+  - id: arch-03
+    category: architecture
+    question: Which class is the data-access layer?
+    expect_evidence_symbols: [CustomerRepository]
+    expect_answer_substrings: [CustomerRepository]
+  - id: arch-04
+    category: architecture
+    question: What is the role of MetadataService in the architecture?
+    expect_evidence_symbols: [MetadataService]
+    expect_answer_substrings: [metadata, table, column]
+  - id: arch-05
+    category: architecture
+    question: How does data flow from the entry point to the database?
+    expect_evidence_symbols: [processCustomer, loadEligibleCustomers, runResolvedQuery]
+    expect_answer_substrings: [loadEligibleCustomers]
+  - id: arch-06
+    category: architecture
+    question: Which classes talk to the database?
+    expect_evidence_symbols: [CustomerRepository, MetadataService]
+    expect_tables: [CUSTOMER]
+  - id: arch-07
+    category: architecture
+    question: Where is configuration loaded from?
+    expect_evidence_files: [application.properties]
+  - id: arch-08
+    category: architecture
+    question: Is there a batch job or Spark job in this project?
+    expect_answer_substrings: [no]
+    forbid_answer_substrings: [SparkSession, "spark job runs"]
+  - id: arch-09
+    category: architecture
+    question: What external integrations does this project have?
+    expect_answer_substrings: [none, database]
+    forbid_answer_substrings: [Kafka, S3, REST API call]
+  - id: arch-10
+    category: architecture
+    question: Give me an overview of the customer processing pipeline.
+    expect_evidence_symbols: [CustomerService, DynamicQueryBuilder]
+    expect_answer_substrings: [eligib]
+  - id: arch-11
+    category: architecture
+    question: What does QueryConstants hold and why?
+    expect_evidence_symbols: [QueryConstants]
+    expect_answer_substrings: [SQL, constant]
+  - id: arch-12
+    category: architecture
+    question: Which package contains the customer module?
+    expect_answer_substrings: [com.acme.customer]
+
+  # ------------------------------------------------------------------------ JAVA
+  - id: java-01
+    category: java
+    question: What does CustomerService.processCustomer do?
+    expect_evidence_symbols: [processCustomer, findCustomer, loadEligibleCustomers]
+    expect_answer_substrings: [findCustomer, loadEligibleCustomers]
+  - id: java-02
+    category: java
+    question: Explain CustomerRepository.findCustomer.
+    expect_evidence_symbols: [findCustomer]
+    expect_answer_substrings: [GET_CUSTOMER, prepareStatement]
+  - id: java-03
+    category: java
+    question: What is the signature of loadEligibleCustomers?
+    expect_evidence_symbols: [loadEligibleCustomers]
+    expect_answer_substrings: [status]
+  - id: java-04
+    category: java
+    question: Which methods does MetadataService expose?
+    expect_evidence_symbols: [getPhysicalTable, getColumnList]
+    expect_answer_substrings: [getPhysicalTable, getColumnList]
+  - id: java-05
+    category: java
+    question: What does DynamicQueryBuilder.buildWithBuilder do?
+    expect_evidence_symbols: [buildWithBuilder]
+    expect_answer_substrings: [StringBuilder, append]
+  - id: java-06
+    category: java
+    question: How does CustomerRepository convert a ResultSet to rows?
+    expect_evidence_symbols: [toRows]
+    expect_answer_substrings: [ResultSet, "column"]
+  - id: java-07
+    category: java
+    question: What are the fields of CustomerService?
+    expect_evidence_symbols: [CustomerService]
+    expect_answer_substrings: [repository, metadataService, queryBuilder]
+  - id: java-08
+    category: java
+    question: Which class constructs the SQL string dynamically?
+    expect_evidence_symbols: [DynamicQueryBuilder]
+    expect_answer_substrings: [DynamicQueryBuilder]
+  - id: java-09
+    category: java
+    question: What imports does CustomerRepository use?
+    expect_evidence_files: [CustomerRepository.java]
+    expect_answer_substrings: [java.sql]
+  - id: java-10
+    category: java
+    question: Does findActiveCustomerIds take any parameters?
+    expect_evidence_symbols: [findActiveCustomerIds]
+    expect_answer_substrings: [no]
+  - id: java-11
+    category: java
+    question: What is CUSTOMER_LOGICAL_NAME and where is it used?
+    expect_evidence_symbols: [loadEligibleCustomers]
+    expect_answer_substrings: [CUSTOMER_ELIGIBILITY]
+  - id: java-12
+    category: java
+    question: Explain the buildQuery method and what it delegates to.
+    expect_evidence_symbols: [buildQuery, buildWithConcat]
+    expect_answer_substrings: [buildWithConcat]
+
+  # ------------------------------------------------------------------------- SQL
+  - id: sql-01
+    category: sql
+    question: What SQL does QueryConstants.GET_CUSTOMER run?
+    expect_evidence_symbols: [GET_CUSTOMER]
+    expect_tables: [CUSTOMER]
+    expect_answer_substrings: [CUSTOMER, CUST_ID]
+  - id: sql-02
+    category: sql
+    question: Which tables does the CUSTOMER_WITH_ADDRESS query join?
+    expect_tables: [CUSTOMER, CUSTOMER_ADDRESS]
+    expect_answer_substrings: [CUSTOMER_ADDRESS]
+  - id: sql-03
+    category: sql
+    question: Where is the CUSTOMER table read?
+    expect_tables: [CUSTOMER]
+    expect_evidence_symbols: [findActiveCustomerIds]
+  - id: sql-04
+    category: sql
+    question: What columns are selected from META_TABLE_REGISTRY?
+    expect_tables: [META_TABLE_REGISTRY]
+    expect_answer_substrings: [PHYSICAL_TABLE]
+  - id: sql-05
+    category: sql
+    question: Is there any INSERT statement in this project?
+    expect_tables: [CUSTOMER_ADDRESS]
+    expect_answer_substrings: [INSERT, CUSTOMER_ADDRESS]
+  - id: sql-06
+    category: sql
+    question: What does the aggregate query on CUSTOMER compute?
+    expect_tables: [CUSTOMER]
+    expect_answer_substrings: [COUNT, STATUS]
+  - id: sql-07
+    category: sql
+    question: Which query uses a named bind parameter?
+    expect_answer_substrings: [country]
+  - id: sql-08
+    category: sql
+    question: What filter does GET_CUSTOMER apply?
+    expect_answer_substrings: [CUST_ID]
+  - id: sql-09
+    category: sql
+    question: List the metadata registry tables.
+    expect_tables: [META_TABLE_REGISTRY, META_COLUMN_REGISTRY]
+  - id: sql-10
+    category: sql
+    question: Which physical tables are ultimately read by the eligible-customers process?
+    expect_tables: [META_TABLE_REGISTRY, META_COLUMN_REGISTRY]
+    expect_labels: [UNKNOWN]
+    forbid_answer_substrings: [CUSTOMER_HISTORY, "the table is CUSTOMER_"]
+
+  # ----------------------------------------------------------------- DYNAMIC SQL
+  - id: dsql-01
+    category: dynamic_sql
+    question: How is the physical table name determined for loadEligibleCustomers?
+    expect_evidence_symbols: [getPhysicalTable, loadEligibleCustomers]
+    expect_tables: [META_TABLE_REGISTRY]
+    expect_dynamic_status: PARTIALLY_RESOLVED
+    expect_answer_substrings: [META_TABLE_REGISTRY, metadata]
+    expect_labels: [UNKNOWN]
+    forbid_answer_substrings: [CUSTOMER_HISTORY, probably, "likely the CUSTOMER table"]
+  - id: dsql-02
+    category: dynamic_sql
+    question: How are the columns for the dynamic query chosen?
+    expect_evidence_symbols: [getColumnList]
+    expect_tables: [META_COLUMN_REGISTRY]
+    expect_dynamic_status: PARTIALLY_RESOLVED
+    expect_answer_substrings: [META_COLUMN_REGISTRY]
+  - id: dsql-03
+    category: dynamic_sql
+    question: Show the SQL template built by DynamicQueryBuilder.buildWithConcat.
+    expect_evidence_symbols: [buildWithConcat]
+    expect_dynamic_status: PARTIALLY_RESOLVED
+    expect_answer_substrings: ["SELECT", "FROM", "WHERE STATUS"]
+  - id: dsql-04
+    category: dynamic_sql
+    question: Is the final SQL for loadEligibleCustomers fully known at compile time?
+    expect_dynamic_status: PARTIALLY_RESOLVED
+    expect_answer_substrings: ["no", "not"]
+    expect_labels: [UNKNOWN]
+  - id: dsql-05
+    category: dynamic_sql
+    question: Trace the metadata dependency chain for the eligible-customers query.
+    expect_evidence_symbols: [getPhysicalTable, getColumnList]
+    expect_tables: [META_TABLE_REGISTRY, META_COLUMN_REGISTRY]
+    expect_answer_substrings: [metadata]
+  - id: dsql-06
+    category: dynamic_sql
+    question: Which constants make up the static skeleton of the dynamic query?
+    expect_evidence_symbols: [DynamicQueryBuilder]
+    expect_answer_substrings: ["SELECT", "FROM"]
+  - id: dsql-07
+    category: dynamic_sql
+    question: Do buildWithBuilder and buildWithConcat produce the same SQL?
+    expect_evidence_symbols: [buildWithBuilder, buildWithConcat]
+    expect_answer_substrings: ["SELECT"]
+  - id: dsql-08
+    category: dynamic_sql
+    question: What is the resolution status of every dynamic SQL site?
+    expect_dynamic_status: PARTIALLY_RESOLVED
+    expect_answer_substrings: [PARTIALLY_RESOLVED]
+  - id: dsql-09
+    category: dynamic_sql
+    question: What kind of dependency supplies the table name — constant, variable or metadata query?
+    expect_answer_substrings: [metadata]
+    forbid_answer_substrings: [hard-coded, hardcoded, literal constant]
+  - id: dsql-10
+    category: dynamic_sql
+    question: If I only have the source code, can I know which physical table the eligible-customers query hits?
+    expect_labels: [UNKNOWN]
+    expect_answer_substrings: ["no", runtime]
+    forbid_answer_substrings: [CUSTOMER_HISTORY]
+
+  # ------------------------------------------------------------------ DEPENDENCY
+  - id: dep-01
+    category: dependency
+    question: Who calls MetadataService.getPhysicalTable?
+    expect_callers: [CustomerService.loadEligibleCustomers]
+    expect_answer_substrings: [loadEligibleCustomers]
+  - id: dep-02
+    category: dependency
+    question: What does CustomerService.loadEligibleCustomers call?
+    expect_answer_substrings: [getPhysicalTable, getColumnList, buildQuery]
+  - id: dep-03
+    category: dependency
+    question: Which classes depend on DynamicQueryBuilder?
+    expect_answer_substrings: [CustomerService]
+  - id: dep-04
+    category: dependency
+    question: Find all callers of runResolvedQuery.
+    expect_callers: [CustomerService.loadEligibleCustomers]
+  - id: dep-05
+    category: dependency
+    question: Is QueryConstants referenced by MetadataService?
+    expect_answer_substrings: [TABLE_LOOKUP_SQL, COLUMN_LOOKUP_SQL]
+  - id: dep-06
+    category: dependency
+    question: What is the call path from processCustomer to getPhysicalTable?
+    expect_answer_substrings: [loadEligibleCustomers]
+
+  # ---------------------------------------------------------------------- IMPACT
+  - id: imp-01
+    category: impact
+    question: What could be impacted if I change loadEligibleCustomers?
+    expect_impact: [CustomerService.processCustomer]
+    expect_tables: [META_TABLE_REGISTRY, META_COLUMN_REGISTRY]
+    expect_answer_substrings: [processCustomer]
+  - id: imp-02
+    category: impact
+    question: If MetadataService.getColumnList changes, what breaks?
+    expect_impact: [CustomerService.loadEligibleCustomers]
+    expect_answer_substrings: [loadEligibleCustomers]
+  - id: imp-03
+    category: impact
+    question: What is the blast radius of changing DynamicQueryBuilder.buildQuery?
+    expect_impact: [CustomerService.loadEligibleCustomers]
+  - id: imp-04
+    category: impact
+    question: Which tests would be affected by a change to processCustomer?
+    expect_answer_substrings: [unknown, "no test"]
+  - id: imp-05
+    category: impact
+    question: Could changing GET_CUSTOMER affect the eligible-customers flow?
+    expect_answer_substrings: [findCustomer]
+
+  # -------------------------------------------------------------------- DEBUGGING
+  - id: dbg-01
+    category: debugging
+    question: Why can't the analyzer tell me the exact table the dynamic query reads?
+    expect_labels: [UNKNOWN]
+    expect_answer_substrings: [metadata, runtime]
+    forbid_answer_substrings: [CUSTOMER_HISTORY]
+  - id: dbg-02
+    category: debugging
+    question: If loadEligibleCustomers returned wrong rows, where would you look first?
+    expect_evidence_symbols: [getPhysicalTable, getColumnList, buildQuery]
+  - id: dbg-03
+    category: debugging
+    question: The eligible-customers query references a table I can't find as a literal. Why?
+    expect_answer_substrings: [metadata, META_TABLE_REGISTRY]
+    expect_labels: [UNKNOWN]
+  - id: dbg-04
+    category: debugging
+    question: Where would a duplicate-record bug in customer processing most likely originate?
+    expect_evidence_symbols: [processCustomer, loadEligibleCustomers]
+  - id: dbg-05
+    category: debugging
+    question: Is the STATUS filter applied consistently across customer queries?
+    expect_answer_substrings: [STATUS]

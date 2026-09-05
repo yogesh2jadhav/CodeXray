@@ -10,9 +10,22 @@ Derived from the build plan §80/§86. Build in order; do not start the UI early
 | 4 | Project graph + hybrid semantic retrieval (NetworkX, local embeddings, impact analysis, architecture extraction) | ✅ done | `graph/`, `retrieval/`, `analyzers/architecture/` |
 | 5 | AI agent (tool calling loop, `max_iterations`, planners) | ✅ done | `agents/` |
 | 6 | React + TypeScript UI (projects, chat+evidence, code viewer, dynamic-SQL trace, graph) | ✅ done | `frontend/` |
-| 7 | Evaluation framework (~100 Q synthetic benchmark, model comparison) | ⬜ todo | `tests/eval/` |
+| 7 | Evaluation framework (~100 Q synthetic benchmark, model comparison) | ✅ done | `eval/`, `scripts/run_eval.py` |
 | 8 | Git integration, runtime evidence | ⬜ todo | |
 | 9 | Spark analysis (second project) | ⬜ todo | `analyzers/spark/` |
+
+## Sprint 7 acceptance (all green — `pytest tests/test_sprint7.py`)
+
+- [x] `eval/dataset/synthetic.yaml` — 60 ground-truth cases (arch 12 / java 12 / sql 10 /
+      dynamic_sql 10 / dependency 6 / impact 5 / debugging 5), each with expected evidence,
+      structured facts, answer content, and **forbidden** content (anti-hallucination); grows toward 100
+- [x] `eval/metrics.py` — §67 metrics: retrieval / evidence / sql-resolution / dependency
+      accuracy, answer_correctness, label_adherence, **hallucination_rate**, latency; invented-table + hedge-as-fact detectors
+- [x] `eval/runner.py` — modes `retrieval` (deterministic, model-independent), `ask`, `agent`;
+      deterministic facts probed identically in every mode so metrics compare cleanly
+- [x] `eval/report.py` + `scripts/run_eval.py` — JSON + Markdown, `--compare m1,m2` model table (§68)
+- [x] Retrieval baseline: **60/60 pass**, retrieval/evidence/sql-resolution/dependency = 1.00 (`docs/EVAL_BASELINE.md`)
+- [x] `ask` mode vs `qwen2.5-coder:7b` on dynamic_sql: **hallucination_rate 0.00**, sql_resolution 1.00, answer_correctness ~0.85
 
 ## Sprint 6 acceptance (React + TypeScript, `frontend/`; `npm run build` clean)
 

@@ -21,7 +21,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-_LABEL_RE = re.compile(r"^\s*(FACT|INFERENCE|UNKNOWN)\s*:\s*(.+)$", re.I | re.M)
+# Tolerate markdown decoration the model adds: "- **UNKNOWN:**", "* FACT :", "### INFERENCE".
+_LABEL_RE = re.compile(r"^\s*(?:[-*>#]+\s*)?(?:\*\*|__)?\s*(FACT|INFERENCE|UNKNOWN)\s*(?:\*\*|__)?\s*:\s*(.+)$", re.I | re.M)
 _REF_RE = re.compile(r"([A-Za-z0-9_./-]+\.(?:java|sql|properties|xml|yaml|yml|json))(?::(\d+))?")
 _EVIDENCE_BLOCK_RE = re.compile(r"(?is)\bevidence\s*:\s*\n?(.+)$")
 
