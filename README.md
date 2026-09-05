@@ -42,7 +42,24 @@ Wired into the indexer (whole-project stage after per-file indexing), persisted 
 `dynamic_sql` / `dynamic_sql_dependencies`, exposed at
 `GET/POST /api/projects/{id}/dynamic-sql[/trace]`.
 
-Later sprints (graph, embeddings, Ollama, agent, React UI) are scaffolded as empty
+## Status — Sprint 3 (Local LLM) ✅
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Provider abstraction | `backend/app/llm/provider.py` | `LLMProvider` interface + `get_provider()` factory (build plan §30) |
+| Ollama provider | `backend/app/llm/ollama_provider.py` | local `/api/chat`, CPU, no CUDA; `LLMUnavailable` → 503 with fix-it text |
+| Echo provider | `backend/app/llm/echo_provider.py` | offline deterministic stub — echoes the assembled evidence, used by tests/CI |
+| Question classifier | `backend/app/llm/question_classifier.py` | type + retrieval modes (§24), symbol/table extraction — no LLM call |
+| Context builder | `backend/app/llm/context_builder.py` | structured evidence sections + `ContextBudgetManager` (§25, §71) |
+| Prompt builder | `backend/app/llm/prompt_builder.py` | technical-lead system prompt, FACT/INFERENCE/UNKNOWN, "never invent a table" (§72) |
+| Response parser | `backend/app/llm/response_parser.py` | label split, cited `file:line`, confidence |
+| Ask service | `backend/app/llm/client.py` | classify → context → prompt → provider → parse |
+
+`POST /api/projects/{id}/ask` · `GET /api/llm/health`. Model configurable via
+`config/config.yaml` (`llm.*`) or `CODEXRAY_LLM_*`. `CODEXRAY_LLM_PROVIDER=echo`
+gives an offline evidence-only response.
+
+Later sprints (graph, embeddings, agent, React UI) are scaffolded as empty
 packages and tracked in `docs/SPRINTS.md`.
 
 ## Quick start

@@ -34,12 +34,15 @@ index:
   vector_store: ./data/vectors
   incremental: true          # skip files whose content hash is unchanged
 
-llm:                         # consumed from Sprint 3 onward
-  provider: ${CODEXRAY_LLM_PROVIDER:-ollama}
+llm:                         # Sprint 3 — local inference
+  provider: ${CODEXRAY_LLM_PROVIDER:-ollama}   # ollama | echo (echo = offline stub)
   model: ${CODEXRAY_LLM_MODEL:-qwen2.5-coder:7b}
   host: ${CODEXRAY_LLM_HOST:-http://localhost:11434}
   temperature: 0.1
-  context_length: 32768
+  context_length: 32768        # num_ctx passed to the model
+  max_tokens: 1024             # cap on generated tokens per answer
+  request_timeout_s: 120       # CPU inference on 24 GB RAM can be slow
+  context_char_budget: 12000   # max chars of assembled evidence in the prompt
 
 embedding:                   # consumed from Sprint 4 onward
   provider: local

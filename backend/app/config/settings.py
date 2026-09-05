@@ -86,11 +86,14 @@ class IndexConfig:
 
 @dataclass(frozen=True)
 class LLMConfig:
-    provider: str
+    provider: str            # ollama | echo (echo = offline deterministic stub)
     model: str
     host: str
     temperature: float
-    context_length: int
+    context_length: int      # model context window (num_ctx), tokens
+    max_tokens: int          # cap on generated tokens
+    request_timeout_s: float
+    context_char_budget: int  # ContextBudgetManager ceiling for assembled evidence
 
 
 @dataclass(frozen=True)
@@ -177,6 +180,9 @@ def get_settings() -> Settings:
             host=os.environ.get("CODEXRAY_LLM_HOST", llm.get("host", "http://localhost:11434")),
             temperature=float(llm.get("temperature", 0.1)),
             context_length=int(llm.get("context_length", 32768)),
+            max_tokens=int(llm.get("max_tokens", 1024)),
+            request_timeout_s=float(llm.get("request_timeout_s", 120)),
+            context_char_budget=int(llm.get("context_char_budget", 12000)),
         ),
         embedding=EmbeddingConfig(
             provider=emb.get("provider", "local"),

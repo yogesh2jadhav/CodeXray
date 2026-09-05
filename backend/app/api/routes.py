@@ -244,9 +244,35 @@ def references(project_id: int, symbol: str) -> dict:
     return {"callers": S.find_callers(project_id, symbol)}
 
 
+@router.get("/llm/health")
+def llm_health() -> dict:
+    """Whether the configured local model backend is reachable (build plan §32)."""
+    from backend.app.llm.client import AskService
+    return AskService().health()
+
+
 @router.post("/projects/{project_id}/ask")
 def ask(project_id: int, body: AskRequest) -> dict:
-    raise HTTPException(501, "LLM Q&A lands in Sprint 3 (Ollama + Context Builder).")
+    """Answer a technical question about the project using retrieved deterministic
+    evidence + the local LLM (build plan §25, §59, §72). Returns the answer, the
+    FACT/INFERENCE/UNKNOWN breakdown, the structured evidence list and timings.
+
+    503 if no local model is available — CodeXray never falls back to the cloud."""
+    _project_or_404(project_id)
+    from backend.app.llm.client import AskService
+    from backend.app.llm.provider import LLMUnavailable
+    try:
+        return AskService().ask(project_id, body.question).as_dict()
+    except LLMUnavailable as exc:
+        raise HTTPException(
+            503,
+            detail={
+                "error": "local LLM unavailable",
+                "message": str(exc),
+                "hint": "Start Ollama (`ollama serve`) and pull a model, or set "
+                        "CODEXRAY_LLM_PROVIDER=echo for an offline evidence-only response.",
+            },
+        )
 
 
 @router.post("/projects/{project_id}/impact-analysis")
