@@ -26,8 +26,24 @@ Implemented in this iteration:
 | API | `backend/app/api/routes.py` | FastAPI endpoints for projects, indexing, files, symbols, SQL, search |
 | Schema | `backend/app/models/schema.sql` | Relational data model (§20/§21 of the plan) |
 
-Later sprints (dynamic SQL analyzer, graph, embeddings, Ollama, agent, React UI) are
-scaffolded as empty packages and tracked in the build plan.
+## Status — Sprint 2 (Dynamic SQL Analyzer) ✅
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Expression IR | `backend/app/analyzers/dynamic_sql/expression.py` | `StringExpr` / `Part` — reconstructed-SQL parts, each with its own status + evidence; renders a `{slot}` template |
+| Project model | `backend/app/analyzers/dynamic_sql/project_model.py` | Cross-file constant + method + field-type index (tree-sitter) for interprocedural resolution |
+| Evaluator | `backend/app/analyzers/dynamic_sql/evaluator.py` | Recursive expr engine: literals, `+`, identifiers, `Class.CONST`, `String.join`, StringBuilder, method-call inlining (depth-bounded) |
+| Resolvers | `backend/app/analyzers/dynamic_sql/resolvers.py` | Named facades: Constant / Variable / MethodReturn / StringConcatenation / StringBuilder / DependencyBuilder |
+| Metadata detector | `backend/app/analyzers/metadata/metadata_detector.py` | Recognises a method that runs `SELECT … FROM <registry>` and returns a table/column value (Patterns C/D) |
+| Template resolver | `backend/app/analyzers/dynamic_sql/sql_template_resolver.py` | Parts → template + resolved SQL (iff fully known) + tables/columns + confidence |
+| Analyzer | `backend/app/analyzers/dynamic_sql/analyzer.py` | Whole-project driver; `trace()` backs the `trace_dynamic_sql` tool |
+
+Wired into the indexer (whole-project stage after per-file indexing), persisted to
+`dynamic_sql` / `dynamic_sql_dependencies`, exposed at
+`GET/POST /api/projects/{id}/dynamic-sql[/trace]`.
+
+Later sprints (graph, embeddings, Ollama, agent, React UI) are scaffolded as empty
+packages and tracked in `docs/SPRINTS.md`.
 
 ## Quick start
 

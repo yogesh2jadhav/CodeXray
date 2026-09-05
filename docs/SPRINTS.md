@@ -5,7 +5,7 @@ Derived from the build plan §80/§86. Build in order; do not start the UI early
 | # | Sprint | Status | Key modules |
 |---|--------|--------|-------------|
 | 1 | Repository indexer (scan → Java AST → SQL parse → SQLite → search API) | ✅ done | `indexing/`, `analyzers/java`, `analyzers/sql`, `retrieval/search.py`, `api/routes.py` |
-| 2 | Dynamic SQL analyzer (constant/variable/method-return/StringBuilder resolvers, metadata-query detection, `dynamic_sql*` tables, `trace_dynamic_sql`) | ⬜ todo | `analyzers/dynamic_sql/`, `analyzers/metadata/` |
+| 2 | Dynamic SQL analyzer (constant/variable/method-return/StringBuilder resolvers, metadata-query detection, `dynamic_sql*` tables, `trace_dynamic_sql`) | ✅ done | `analyzers/dynamic_sql/`, `analyzers/metadata/` |
 | 3 | Local LLM (Ollama provider abstraction, PromptBuilder, ContextBuilder, ResponseParser, `/ask`) | ⬜ todo | `llm/` |
 | 4 | Project graph + hybrid semantic retrieval (NetworkX, embeddings via local model, Qdrant, impact analysis, architecture extraction) | ⬜ todo | `graph/`, `retrieval/` |
 | 5 | AI agent (tool calling loop, `max_iterations`, planners) | ⬜ todo | `agents/` |
@@ -13,6 +13,18 @@ Derived from the build plan §80/§86. Build in order; do not start the UI early
 | 7 | Evaluation framework (~100 Q synthetic benchmark, model comparison) | ⬜ todo | `tests/eval/` |
 | 8 | Git integration, runtime evidence | ⬜ todo | |
 | 9 | Spark analysis (second project) | ⬜ todo | `analyzers/spark/` |
+
+## Sprint 2 acceptance (all green — `pytest tests/test_sprint2.py`)
+
+- [x] Resolvers: Constant, Variable, MethodReturn (interprocedural, depth-bounded), StringConcatenation, StringBuilder
+- [x] `MetadataQueryDetector` — a method that runs `SELECT ... FROM <registry>` and returns a table/column value
+- [x] Reconstruct SQL as a **template** with `{slot}` placeholders for unknown parts
+- [x] End-to-end §83 trace: `CustomerService.loadEligibleCustomers` →
+      `SELECT {columns} FROM {table} WHERE STATUS = ?` with deps
+      `METADATA_QUERY(META_COLUMN_REGISTRY)`, `METADATA_QUERY(META_TABLE_REGISTRY)`, 3×`CONSTANT`
+- [x] Status vocabulary RESOLVED / PARTIALLY_RESOLVED / UNRESOLVED; **never** invents a table (§29)
+- [x] Persisted to `dynamic_sql` + `dynamic_sql_dependencies` (with evidence JSON)
+- [x] `GET /projects/{id}/dynamic-sql` and `POST /projects/{id}/dynamic-sql/trace` (the `trace_dynamic_sql` tool)
 
 ## Sprint 1 acceptance (all green — `pytest`)
 

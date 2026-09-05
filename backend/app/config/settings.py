@@ -105,6 +105,15 @@ class AgentConfig:
 
 
 @dataclass(frozen=True)
+class DynamicSqlConfig:
+    # How many nested method returns MethodReturnResolver will inline before it
+    # stops and marks the part PARTIALLY_RESOLVED (guards against recursion and
+    # keeps analysis bounded on large projects).
+    max_depth: int
+    enabled: bool
+
+
+@dataclass(frozen=True)
 class SecurityConfig:
     local_only: bool
     redact_secrets: bool
@@ -119,6 +128,7 @@ class Settings:
     llm: LLMConfig
     embedding: EmbeddingConfig
     agent: AgentConfig
+    dynamic_sql: DynamicSqlConfig
     security: SecurityConfig
     retrieval_weights: dict[str, float]
     logging_level: str
@@ -143,6 +153,7 @@ def get_settings() -> Settings:
     llm = raw.get("llm", {})
     emb = raw.get("embedding", {})
     agent = raw.get("agent", {})
+    dsql = raw.get("dynamic_sql", {})
     sec = raw.get("security", {})
 
     return Settings(
@@ -172,6 +183,10 @@ def get_settings() -> Settings:
             model=os.environ.get("CODEXRAY_EMBEDDING_MODEL", emb.get("model", "nomic-embed-text")),
         ),
         agent=AgentConfig(max_iterations=int(agent.get("max_iterations", 8))),
+        dynamic_sql=DynamicSqlConfig(
+            max_depth=int(dsql.get("max_depth", 5)),
+            enabled=_as_bool(dsql.get("enabled", True), True),
+        ),
         security=SecurityConfig(
             local_only=_as_bool(os.environ.get("CODEXRAY_LOCAL_ONLY", sec.get("local_only", True)), True),
             redact_secrets=_as_bool(os.environ.get("CODEXRAY_REDACT_SECRETS", sec.get("redact_secrets", True)), True),

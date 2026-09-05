@@ -28,6 +28,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from backend.app.analyzers.dynamic_sql.analyzer import DynamicSqlAnalyzer
 from backend.app.analyzers.java.java_parser import parse_java
 from backend.app.config.settings import get_settings
 from backend.app.indexing.config_extractor import extract_config
@@ -49,6 +50,7 @@ class IndexReport:
     files_indexed: int = 0
     files_skipped: int = 0
     files_failed: int = 0
+    dynamic_sql_sites: int = 0
     failures: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -60,6 +62,7 @@ class IndexReport:
             "files_indexed": self.files_indexed,
             "files_skipped": self.files_skipped,
             "files_failed": self.files_failed,
+            "dynamic_sql_sites": self.dynamic_sql_sites,
             "failures": self.failures[:50],
         }
 
@@ -97,6 +100,18 @@ class ProjectIndexer:
                 self.writer.record_failure(project_id, sf.rel_path, parser, repr(exc))
                 report.files_failed += 1
                 report.failures.append({"file": sf.rel_path, "error": repr(exc)})
+
+        # Sprint 2: interprocedural dynamic-SQL reconstruction over the whole
+        # project (not per file), rebuilt wholesale each run.
+        if self.settings.dynamic_sql.enabled:
+            try:
+                java_files = [(f.rel_path, f.abs_path) for f in files if f.language == Language.JAVA]
+                records = DynamicSqlAnalyzer().analyze_project(java_files)
+                self.writer.clear_dynamic_sql(project_id)
+                report.dynamic_sql_sites = self.writer.write_dynamic_sql(project_id, records)
+            except Exception as exc:  # never fail the run for the optional stage
+                log.exception("dynamic-SQL analysis stage failed")
+                self.writer.record_failure(project_id, "<project>", "dynamic_sql", repr(exc))
 
         status = "ok" if report.files_failed == 0 else "error"
         self.writer.finish_run(run_id, report.files_indexed, report.files_skipped, report.files_failed, status)

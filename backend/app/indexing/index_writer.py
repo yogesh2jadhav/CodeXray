@@ -278,5 +278,61 @@ class IndexWriter:
                 (project_id, file_id, title, content[:200_000]),
             )
 
+    # -------------------------------------------------------------- dynamic SQL
+    def clear_dynamic_sql(self, project_id: int) -> None:
+        """Dynamic SQL is a whole-project (interprocedural) result, so it is
+        rebuilt wholesale on each run rather than per file."""
+        with transaction(self.conn) as cur:
+            cur.execute("DELETE FROM dynamic_sql WHERE project_id = ?", (project_id,))
+
+    def write_dynamic_sql(self, project_id: int, records: list) -> int:
+        """Persist DynamicSqlRecord objects; returns the number written."""
+        import json
+
+        # rel-path -> file_id  and  Class.method -> method_id  lookup tables
+        files = {r["path"]: r["id"] for r in self.conn.execute(
+            "SELECT id, path FROM files WHERE project_id = ?", (project_id,))}
+        methods = {}
+        for r in self.conn.execute(
+            "SELECT m.id AS mid, m.name AS mname, c.name AS cname "
+            "FROM methods m LEFT JOIN classes c ON c.id = m.class_id WHERE m.project_id = ?",
+            (project_id,),
+        ):
+            methods[f"{r['cname']}.{r['mname']}"] = r["mid"]
+
+        written = 0
+        with transaction(self.conn) as cur:
+            for rec in records:
+                file_id = files.get(rec.file)
+                if file_id is None:
+                    continue
+                cur.execute(
+                    "INSERT INTO dynamic_sql(project_id, source_method_id, source_file_id, source_class, "
+                    "source_method, source_var, line_number, expression, sql_template, resolution_status, "
+                    "resolved_sql, confidence, tables_json, columns_json) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        project_id,
+                        methods.get(f"{rec.source_class}.{rec.source_method}"),
+                        file_id, rec.source_class, rec.source_method, rec.source_var, rec.line,
+                        rec.expression, rec.sql_template, rec.resolution_status.value,
+                        rec.resolved_sql, rec.confidence,
+                        json.dumps(rec.tables), json.dumps(rec.columns),
+                    ),
+                )
+                dyn_id = int(cur.lastrowid)
+                for i, dep in enumerate(rec.dependencies):
+                    cur.execute(
+                        "INSERT INTO dynamic_sql_dependencies(dynamic_sql_id, ordinal, dependency_type, "
+                        "source_type, source_id, value, resolution_status, evidence_json) "
+                        "VALUES(?,?,?,?,?,?,?,?)",
+                        (
+                            dyn_id, i, dep.dependency_type, dep.source_type, None,
+                            dep.value, dep.resolution_status, json.dumps(dep.evidence),
+                        ),
+                    )
+                written += 1
+        return written
+
     def close(self) -> None:
         self.conn.close()

@@ -56,6 +56,10 @@ class AskRequest(BaseModel):
     question: str
 
 
+class TraceRequest(BaseModel):
+    selector: str = Field(..., description="class name, Class.method, table name, or a SQL fragment")
+
+
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -108,6 +112,7 @@ def project_status(project_id: int) -> dict:
         "methods": conn.execute("SELECT COUNT(*) FROM methods WHERE project_id=?", (project_id,)).fetchone()[0],
         "sql_queries": conn.execute("SELECT COUNT(*) FROM sql_queries WHERE project_id=?", (project_id,)).fetchone()[0],
         "symbols": conn.execute("SELECT COUNT(*) FROM symbols WHERE project_id=?", (project_id,)).fetchone()[0],
+        "dynamic_sql": conn.execute("SELECT COUNT(*) FROM dynamic_sql WHERE project_id=?", (project_id,)).fetchone()[0],
         "parse_failures": conn.execute("SELECT COUNT(*) FROM parse_failures WHERE project_id=?", (project_id,)).fetchone()[0],
     }
     return {"project": proj, "last_run": dict(run) if run else None, "counts": counts}
@@ -202,15 +207,19 @@ def table_usage(project_id: int, table: str) -> list[dict]:
 
 @router.get("/projects/{project_id}/dynamic-sql")
 def dynamic_sql(project_id: int) -> list[dict]:
+    """Every reconstructed dynamic-SQL construction site with its dependency chain."""
     _project_or_404(project_id)
-    conn = get_connection()
-    return [dict(r) for r in conn.execute(
-        "SELECT * FROM dynamic_sql WHERE project_id=? ORDER BY id", (project_id,)).fetchall()]
+    return S.list_dynamic_sql(project_id)
 
 
 @router.post("/projects/{project_id}/dynamic-sql/trace")
-def trace_dynamic_sql(project_id: int) -> dict:
-    raise HTTPException(501, "Dynamic SQL tracing lands in Sprint 2 (see docs build plan §56).")
+def trace_dynamic_sql(project_id: int, body: TraceRequest) -> dict:
+    """`trace_dynamic_sql(query_or_method)` (build plan §28): deterministic
+    evidence for how a dynamic query is assembled — template, dependencies
+    (CONSTANT / METADATA_QUERY / METHOD_RETURN / PARAMETER / ...), tables and an
+    overall RESOLVED / PARTIALLY_RESOLVED / UNRESOLVED status."""
+    _project_or_404(project_id)
+    return S.trace_dynamic_sql(project_id, body.selector)
 
 
 # --------------------------------------------------------------------------- #

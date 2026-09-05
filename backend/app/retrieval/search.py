@@ -143,6 +143,71 @@ def find_callers(project_id: int, method_name: str, conn=None) -> list[dict]:
 find_references = find_callers
 
 
+def _dyn_row(conn, row: dict) -> dict:
+    import json
+    deps = [dict(r) for r in conn.execute(
+        "SELECT ordinal, dependency_type, source_type, value, resolution_status, evidence_json "
+        "FROM dynamic_sql_dependencies WHERE dynamic_sql_id = ? ORDER BY ordinal", (row["id"],))]
+    for d in deps:
+        d["evidence"] = json.loads(d.pop("evidence_json") or "[]")
+    return {
+        "id": row["id"],
+        "source_class": row["source_class"],
+        "source_method": row["source_method"],
+        "source_var": row["source_var"],
+        "file": None,
+        "line": row["line_number"],
+        "expression": row["expression"],
+        "sql_template": row["sql_template"],
+        "resolved_sql": row["resolved_sql"],
+        "status": row["resolution_status"],
+        "confidence": row["confidence"],
+        "tables": json.loads(row["tables_json"] or "[]"),
+        "columns": json.loads(row["columns_json"] or "[]"),
+        "dependencies": deps,
+    }
+
+
+def list_dynamic_sql(project_id: int, conn=None) -> list[dict]:
+    c = _conn(conn)
+    rows = [dict(r) for r in c.execute(
+        "SELECT ds.*, f.path AS fpath FROM dynamic_sql ds JOIN files f ON f.id = ds.source_file_id "
+        "WHERE ds.project_id = ? ORDER BY ds.source_class, ds.source_method", (project_id,))]
+    out = []
+    for r in rows:
+        d = _dyn_row(c, r)
+        d["file"] = r["fpath"]
+        out.append(d)
+    return out
+
+
+def trace_dynamic_sql(project_id: int, selector: str, conn=None) -> dict:
+    """Back the trace_dynamic_sql tool (build plan §28): match a class /
+    Class.method / table / SQL fragment against reconstructed sites."""
+    all_sites = list_dynamic_sql(project_id, conn)
+    sel = selector.strip().lower()
+    def haystack(d: dict) -> str:
+        meta = [
+            t
+            for dep in d["dependencies"]
+            for e in dep.get("evidence", [])
+            for t in (e.get("metadata_tables") or [])
+        ]
+        return " ".join([
+            d["source_class"], d["source_method"], f"{d['source_class']}.{d['source_method']}",
+            d["sql_template"] or "", d["resolved_sql"] or "",
+            " ".join(d["tables"]), " ".join(d["columns"]), " ".join(meta),
+        ]).lower()
+
+    matches = [d for d in all_sites if sel in haystack(d)]
+    status = "NO_MATCH"
+    if matches:
+        statuses = {m["status"] for m in matches}
+        status = "RESOLVED" if statuses == {"RESOLVED"} else (
+            "UNRESOLVED" if statuses == {"UNRESOLVED"} else "PARTIALLY_RESOLVED")
+    return {"selector": selector, "status": status, "match_count": len(matches), "sites": matches}
+
+
 def search_keyword(project_id: int, query: str, limit: int = 40, conn=None) -> list[dict]:
     """Blend symbol / SQL / doc matches into one scored list."""
     w = get_settings().retrieval_weights

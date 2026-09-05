@@ -48,6 +48,10 @@ embedding:                   # consumed from Sprint 4 onward
 agent:                       # consumed from Sprint 6 onward
   max_iterations: 8
 
+dynamic_sql:                  # Sprint 2 — dynamic SQL reconstruction
+  enabled: true
+  max_depth: 5               # max nested method-return inlining depth
+
 retrieval:
   # Weights for the multi-signal code ranking described in §36 of the build plan.
   weights:

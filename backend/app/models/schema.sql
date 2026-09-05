@@ -232,21 +232,29 @@ CREATE TABLE IF NOT EXISTS dynamic_sql (
     project_id        INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     source_method_id  INTEGER REFERENCES methods(id) ON DELETE CASCADE,
     source_file_id    INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    source_class      TEXT,
+    source_method     TEXT,
+    source_var        TEXT,
+    line_number       INTEGER,
     expression        TEXT,
     sql_template      TEXT,
     resolution_status TEXT NOT NULL DEFAULT 'UNRESOLVED',
     resolved_sql      TEXT,
-    confidence        REAL
+    confidence        REAL,
+    tables_json       TEXT,                    -- JSON array of table names parsed from the template
+    columns_json      TEXT                     -- JSON array of column names
 );
 
 CREATE TABLE IF NOT EXISTS dynamic_sql_dependencies (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
     dynamic_sql_id    INTEGER NOT NULL REFERENCES dynamic_sql(id) ON DELETE CASCADE,
+    ordinal           INTEGER NOT NULL DEFAULT 0,
     dependency_type   TEXT NOT NULL,           -- CONSTANT|VARIABLE|METHOD_RETURN|METADATA_QUERY|CONFIGURATION|PARAMETER|UNKNOWN
     source_type       TEXT,
     source_id         INTEGER,
     value             TEXT,
-    resolution_status TEXT NOT NULL DEFAULT 'UNRESOLVED'
+    resolution_status TEXT NOT NULL DEFAULT 'UNRESOLVED',
+    evidence_json     TEXT                     -- JSON array of {detail,file,line,metadata_sql,metadata_tables}
 );
 
 CREATE TABLE IF NOT EXISTS dependencies (
