@@ -1,0 +1,68 @@
+# CodeXray configuration.
+# Purpose: single source of tunable behaviour for indexing, retrieval, the LLM and
+# security. Nothing important is hard-coded in the application; see
+# backend/app/config/settings.py for the typed loader. Values may reference
+# environment variables as ${VAR} and are overridden by CODEXRAY_* env vars.
+
+project:
+  # Default project root used by scripts/index_project.py when --root is omitted.
+  root: ./projects/synthetic-test-project
+
+scan:
+  # File extensions the scanner treats as source. Everything else becomes a plain
+  # "document" (indexed for text/RAG only) or is ignored.
+  java_extensions: [".java"]
+  sql_extensions: [".sql"]
+  config_extensions: [".properties", ".yaml", ".yml", ".xml", ".json"]
+  doc_extensions: [".md", ".txt", ".rst", ".adoc"]
+  # Directory names skipped entirely.
+  ignore_dirs:
+    - .git
+    - .idea
+    - .venv
+    - venv
+    - node_modules
+    - target
+    - build
+    - out
+    - dist
+    - __pycache__
+  max_file_bytes: 2000000   # skip files larger than this (generated / vendored)
+
+index:
+  database: ${CODEXRAY_INDEX_DB:-data/indexes/codexray.db}
+  vector_store: ./data/vectors
+  incremental: true          # skip files whose content hash is unchanged
+
+llm:                         # consumed from Sprint 3 onward
+  provider: ${CODEXRAY_LLM_PROVIDER:-ollama}
+  model: ${CODEXRAY_LLM_MODEL:-qwen2.5-coder:7b}
+  host: ${CODEXRAY_LLM_HOST:-http://localhost:11434}
+  temperature: 0.1
+  context_length: 32768
+
+embedding:                   # consumed from Sprint 4 onward
+  provider: local
+  model: ${CODEXRAY_EMBEDDING_MODEL:-nomic-embed-text}
+
+agent:                       # consumed from Sprint 6 onward
+  max_iterations: 8
+
+retrieval:
+  # Weights for the multi-signal code ranking described in §36 of the build plan.
+  weights:
+    symbol_exact: 5.0
+    path_match: 2.0
+    keyword: 1.5
+    semantic: 3.0
+    dependency: 1.0
+    sql: 1.5
+
+security:
+  local_only: ${CODEXRAY_LOCAL_ONLY:-true}
+  redact_secrets: ${CODEXRAY_REDACT_SECRETS:-true}
+  # Regex fragments whose matched values are masked in any indexed config/text.
+  secret_key_patterns: ["password", "passwd", "secret", "token", "api[_-]?key", "connection[_-]?string", "credential"]
+
+logging:
+  level: INFO

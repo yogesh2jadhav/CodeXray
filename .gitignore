@@ -1,0 +1,15 @@
+# CodeXray — never commit local indexes, secrets, or virtualenvs.
+backend/.venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+data/indexes/*
+data/vectors/*
+data/graphs/*
+data/cache/*
+!data/**/.gitkeep
+.idea/
+.DS_Store
+node_modules/
+frontend/dist/

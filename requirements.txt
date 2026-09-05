@@ -1,0 +1,25 @@
+# CodeXray backend dependencies — all run locally, no cloud services.
+
+# --- Web API ---
+fastapi==0.115.2
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+
+# --- Config ---
+pyyaml==6.0.2
+python-dotenv==1.0.1
+
+# --- Java AST parsing (primary). Regex fallback is used if these are missing. ---
+tree-sitter==0.21.3
+tree-sitter-languages==1.10.2
+
+# --- SQL parsing (real parser, not the LLM) ---
+sqlglot==25.24.0
+
+# --- Testing ---
+pytest==8.3.3
+httpx==0.27.2
+
+# Later sprints (kept here for reference, not required for Sprint 1):
+#   ollama, qdrant-client, sentence-transformers, networkx, gitpython
+networkx==3.3
