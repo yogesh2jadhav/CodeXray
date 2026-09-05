@@ -9,10 +9,21 @@ Derived from the build plan §80/§86. Build in order; do not start the UI early
 | 3 | Local LLM (Ollama provider abstraction, PromptBuilder, ContextBuilder, ResponseParser, `/ask`) | ✅ done | `llm/` |
 | 4 | Project graph + hybrid semantic retrieval (NetworkX, local embeddings, impact analysis, architecture extraction) | ✅ done | `graph/`, `retrieval/`, `analyzers/architecture/` |
 | 5 | AI agent (tool calling loop, `max_iterations`, planners) | ✅ done | `agents/` |
-| 6 | React + TypeScript UI (projects, chat+evidence, code viewer, dynamic-SQL trace, graph) | ⬜ todo | `frontend/` |
+| 6 | React + TypeScript UI (projects, chat+evidence, code viewer, dynamic-SQL trace, graph) | ✅ done | `frontend/` |
 | 7 | Evaluation framework (~100 Q synthetic benchmark, model comparison) | ⬜ todo | `tests/eval/` |
 | 8 | Git integration, runtime evidence | ⬜ todo | |
 | 9 | Spark analysis (second project) | ⬜ todo | `analyzers/spark/` |
+
+## Sprint 6 acceptance (React + TypeScript, `frontend/`; `npm run build` clean)
+
+- [x] Vite + React 18 + TS, zero UI framework, ~52 kB gzipped bundle; `/api` proxied to FastAPI
+- [x] Screens: Projects, Overview (index counts + re-index), Search (keyword/symbol/sql/semantic/hybrid),
+      Chat (`/ask` + evidence), Agent (`/investigate` — plan + tool trace + evidence),
+      Dynamic SQL viewer (§52 — template → deps → metadata chain → status), Architecture (§39), Graph + impact (§41)
+- [x] Code viewer panel — click any `file:line` in evidence / results / traces to open source, scrolled + highlighted (§50)
+- [x] Hash router (no react-router dep); LLM-health pill in the top bar
+- [x] Verified live in-browser against the backend + `qwen2.5-coder:7b`: hybrid search, dynamic-SQL trace,
+      architecture, and the agent (LLM requested 3 follow-up tools beyond the seed plan)
 
 ## Sprint 5 acceptance (all green — `pytest tests/test_sprint5.py`)
 

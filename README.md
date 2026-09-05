@@ -89,7 +89,21 @@ tool trace + aggregated evidence. `GET /api/agent/tools` lists the catalogue.
 The agent degrades to its deterministic seed plan when the model can't drive the
 loop, and never fabricates tool output.
 
-Next sprint (React UI) is tracked in `docs/SPRINTS.md`.
+## Status — Sprint 6 (Web UI) ✅
+
+React + TypeScript + Vite under `frontend/` — no UI framework, ~52 kB gzipped.
+
+```bash
+cd frontend && npm install && npm run dev     # http://localhost:5173 (proxies /api → :8000)
+npm run build                                  # static bundle in frontend/dist/
+```
+
+Screens: Projects · Overview (counts + re-index) · Search (keyword/symbol/sql/semantic/hybrid) ·
+Chat (`/ask` + evidence) · Agent (`/investigate` — plan, tool trace, evidence) ·
+Dynamic SQL viewer (§52) · Architecture (§39) · Graph + impact (§41). Click any
+`file:line` to open the source panel, scrolled and highlighted (§50).
+
+Next sprints (eval framework, git, Spark) are tracked in `docs/SPRINTS.md`.
 
 ## Quick start
 
