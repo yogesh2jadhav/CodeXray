@@ -54,7 +54,12 @@ class EchoProvider(LLMProvider):
 
         # Pull the section headings the ContextBuilder emitted, for a quick digest.
         sections = re.findall(r"^([A-Z][A-Z /]+):\s*$", prompt, re.MULTILINE)
-        evidence_lines = [ln.strip() for ln in prompt.splitlines() if ln.strip().startswith("- ")]
+        # ...and the agent's tool headers, if this is an investigation prompt.
+        sections += [f"tool: {t}" for t in re.findall(r"^### tool:\s*(\S+)", prompt, re.MULTILINE)]
+        evidence_lines = [
+            ln.strip() for ln in prompt.splitlines()
+            if ln.strip().startswith("- ") or re.search(r"\.(java|sql|properties|xml|ya?ml):\d+", ln)
+        ]
 
         section_lines = [f"  - {s.strip()}" for s in sections] or ["  (none)"]
         ev_digest = [f"  {ln}" for ln in evidence_lines[:20]] or ["  (no evidence lines)"]

@@ -8,11 +8,27 @@ Derived from the build plan §80/§86. Build in order; do not start the UI early
 | 2 | Dynamic SQL analyzer (constant/variable/method-return/StringBuilder resolvers, metadata-query detection, `dynamic_sql*` tables, `trace_dynamic_sql`) | ✅ done | `analyzers/dynamic_sql/`, `analyzers/metadata/` |
 | 3 | Local LLM (Ollama provider abstraction, PromptBuilder, ContextBuilder, ResponseParser, `/ask`) | ✅ done | `llm/` |
 | 4 | Project graph + hybrid semantic retrieval (NetworkX, local embeddings, impact analysis, architecture extraction) | ✅ done | `graph/`, `retrieval/`, `analyzers/architecture/` |
-| 5 | AI agent (tool calling loop, `max_iterations`, planners) | ⬜ todo | `agents/` |
+| 5 | AI agent (tool calling loop, `max_iterations`, planners) | ✅ done | `agents/` |
 | 6 | React + TypeScript UI (projects, chat+evidence, code viewer, dynamic-SQL trace, graph) | ⬜ todo | `frontend/` |
 | 7 | Evaluation framework (~100 Q synthetic benchmark, model comparison) | ⬜ todo | `tests/eval/` |
 | 8 | Git integration, runtime evidence | ⬜ todo | |
 | 9 | Spark analysis (second project) | ⬜ todo | `analyzers/spark/` |
+
+## Sprint 5 acceptance (all green — `pytest tests/test_sprint5.py`)
+
+- [x] `agents/tools.py` — 19 read-only tools (search_code/symbol, get_file/class/method,
+      find_callers/callees/references, trace_call_path, get_class_dependencies, search_sql,
+      get_sql_query, find_table/column_usage, trace_dynamic_sql, trace_metadata_dependency,
+      impact_analysis, get_project_architecture, search_documents) + `ToolRegistry`
+- [x] `agents/planner.py` — deterministic §27-style seed plan per question type
+- [x] `agents/agent.py` — loop: classify → plan → run seed tools → optional LLM tool
+      requests (JSON protocol, `agent.max_iterations`) → synthesis with FACT/INFERENCE/
+      UNKNOWN rules → parse. Degrades to the seed plan when the model can't plan (echo /
+      weak model); never invents tool output
+- [x] `GraphService.impact_analysis` handles class targets (aggregates over methods)
+- [x] API: `POST /projects/{id}/investigate`, `GET /agent/tools`; 503 when the model is down
+- [x] Live vs qwen2.5-coder:7b: "trace how table name + columns are determined end to end"
+      → full metadata-chain answer from tool evidence, ~30 s
 
 ## Sprint 4 acceptance (all green — `pytest tests/test_sprint4.py`)
 

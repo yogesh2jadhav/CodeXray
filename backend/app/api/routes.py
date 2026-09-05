@@ -299,6 +299,35 @@ def references(project_id: int, symbol: str) -> dict:
     return {"callers": S.find_callers(project_id, symbol)}
 
 
+class InvestigateRequest(BaseModel):
+    question: str
+    llm_planning: bool | None = Field(None, description="override agent.enable_llm_planning for this call")
+
+
+@router.get("/agent/tools")
+def agent_tools() -> list[dict]:
+    """The read-only tool catalogue the investigation agent can call (build plan §26)."""
+    from backend.app.agents.tools import ToolRegistry
+    return ToolRegistry(0).catalogue()
+
+
+@router.post("/projects/{project_id}/investigate")
+def investigate(project_id: int, body: InvestigateRequest) -> dict:
+    """Multi-step tool-calling investigation (build plan §60): classify → plan →
+    call read-only tools → (optional LLM follow-ups) → synthesise an
+    evidence-labelled answer. Returns the answer, the plan, the full tool trace
+    and aggregated evidence. 503 if no local model is available."""
+    _project_or_404(project_id)
+    from backend.app.agents.agent import InvestigationAgent
+    from backend.app.llm.provider import LLMUnavailable
+
+    try:
+        agent = InvestigationAgent(project_id, enable_llm_planning=body.llm_planning)
+        return agent.investigate(body.question).as_dict()
+    except LLMUnavailable as exc:
+        raise HTTPException(503, detail={"error": "local LLM unavailable", "message": str(exc)})
+
+
 @router.get("/llm/health")
 def llm_health() -> dict:
     """Whether the configured local model backend is reachable (build plan §32)."""

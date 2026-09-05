@@ -76,8 +76,20 @@ API: `/graph`, `/graph/callers`, `/graph/path`, `/impact-analysis`, `/architectu
 (`?format=md`), `/search` modes `semantic`+`hybrid`, `/semantic/status`. All three
 build as indexer post-passes. `CODEXRAY_EMBEDDING_PROVIDER=hashing` runs offline.
 
-Later sprints (agent, React UI) are scaffolded as empty packages and tracked in
-`docs/SPRINTS.md`.
+## Status — Sprint 5 (Investigation Agent) ✅
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Tools | `backend/app/agents/tools.py` | 19 read-only tools wrapping search / graph / dynamic-SQL / architecture / semantic (§26, §28) |
+| Planner | `backend/app/agents/planner.py` | deterministic §27-style seed tool sequence per question type |
+| Agent | `backend/app/agents/agent.py` | classify → plan → run tools → optional LLM tool loop (`agent.max_iterations`) → synthesise → parse (§60) |
+
+`POST /api/projects/{id}/investigate` returns the answer + the plan + the full
+tool trace + aggregated evidence. `GET /api/agent/tools` lists the catalogue.
+The agent degrades to its deterministic seed plan when the model can't drive the
+loop, and never fabricates tool output.
+
+Next sprint (React UI) is tracked in `docs/SPRINTS.md`.
 
 ## Quick start
 

@@ -194,6 +194,25 @@ class GraphService:
             res.unknowns.append(f"symbol '{symbol}' not found in the graph")
             return res
 
+        # A class target: aggregate the impact of each of its methods.
+        if parse_node_id(node)[0] == NodeKind.CLASS.value:
+            methods = self._edges_of(node, {EdgeType.CONTAINS}, incoming=False)
+            methods = [m for m in methods if parse_node_id(m)[0] == NodeKind.METHOD.value]
+            if methods:
+                for m in methods:
+                    sub = self.impact_analysis(parse_node_id(m)[1], depth)
+                    res.direct += sub.direct
+                    res.indirect += sub.indirect
+                    res.sql += sub.sql
+                    res.tables += sub.tables
+                    res.tests += sub.tests
+                for f in (res.direct, res.indirect, res.sql, res.tables, res.tests):
+                    f[:] = sorted(set(f))
+                res.direct = [d for d in res.direct if d.split(".")[0] != parse_node_id(node)[1]]
+                if not res.direct and not res.indirect:
+                    res.unknowns.append(f"no external callers of {symbol}'s methods found")
+                return res
+
         # reverse BFS over CALLS for caller reachability
         call_view = nx.DiGraph()
         for u, v, k in self.g.edges(keys=True):

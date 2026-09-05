@@ -120,7 +120,9 @@ class RetrievalConfig:
 
 @dataclass(frozen=True)
 class AgentConfig:
-    max_iterations: int
+    max_iterations: int          # extra LLM-requested tool rounds after the seed plan
+    enable_llm_planning: bool     # let the model request follow-up tools (off => seed plan only)
+    tool_result_char_limit: int   # per-tool result cap in the transcript
 
 
 @dataclass(frozen=True)
@@ -212,7 +214,11 @@ def get_settings() -> Settings:
             dim=int(emb.get("dim", 512)),
             batch=int(emb.get("batch", 16)),
         ),
-        agent=AgentConfig(max_iterations=int(agent.get("max_iterations", 8))),
+        agent=AgentConfig(
+            max_iterations=int(agent.get("max_iterations", 8)),
+            enable_llm_planning=_as_bool(agent.get("enable_llm_planning", True), True),
+            tool_result_char_limit=int(agent.get("tool_result_char_limit", 4000)),
+        ),
         dynamic_sql=DynamicSqlConfig(
             max_depth=int(dsql.get("max_depth", 5)),
             enabled=_as_bool(dsql.get("enabled", True), True),
