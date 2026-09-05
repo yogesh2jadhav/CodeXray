@@ -10,8 +10,11 @@ pyyaml==6.0.2
 python-dotenv==1.0.1
 
 # --- Java AST parsing (primary). Regex fallback is used if these are missing. ---
-tree-sitter==0.21.3
-tree-sitter-languages==1.10.2
+# tree-sitter-java ships wheels for Python 3.9-3.13 (the old tree-sitter-languages
+# bundle does not build on 3.12+). backend/app/analyzers/tree_sitter_setup.py also
+# accepts tree-sitter-language-pack or the legacy bundle if either is present.
+tree-sitter>=0.23,<0.26
+tree-sitter-java>=0.23,<0.25
 
 # --- SQL parsing (real parser, not the LLM) ---
 sqlglot==25.24.0

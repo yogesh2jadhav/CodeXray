@@ -51,11 +51,8 @@ def looks_like_sql(text: str | None) -> bool:
 # --------------------------------------------------------------------------- #
 def _get_ts_parser():
     """Return a configured tree-sitter Java parser, or None if unavailable."""
-    try:
-        from tree_sitter_languages import get_parser
-        return get_parser("java")
-    except Exception:
-        return None
+    from backend.app.analyzers.tree_sitter_setup import get_java_parser
+    return get_java_parser()
 
 
 class _TreeSitterJava:

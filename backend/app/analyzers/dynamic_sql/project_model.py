@@ -32,11 +32,8 @@ _SQL_HINT = ("SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "WITH ")
 
 
 def _get_parser():
-    try:
-        from tree_sitter_languages import get_parser
-        return get_parser("java")
-    except Exception:  # pragma: no cover
-        return None
+    from backend.app.analyzers.tree_sitter_setup import get_java_parser
+    return get_java_parser()
 
 
 @dataclass

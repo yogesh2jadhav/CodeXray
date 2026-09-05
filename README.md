@@ -125,18 +125,35 @@ Next sprints (git, Spark) are tracked in `docs/SPRINTS.md`.
 
 ## Quick start
 
+Requires **Python 3.10–3.13** and **Node 18+**. Ollama optional (see offline mode).
+
+**macOS / Linux**
 ```bash
-python3 -m venv backend/.venv
-source backend/.venv/bin/activate
+python3 -m venv backend/.venv && source backend/.venv/bin/activate
 pip install -r requirements.txt
-
-# Index the bundled synthetic test project
 python scripts/index_project.py --root projects/synthetic-test-project --name synthetic
-
-# Run the API
-uvicorn backend.app.main:app --reload --port 8000
-# open http://localhost:8000/docs
+uvicorn backend.app.main:app --reload --port 8000        # http://localhost:8000/docs
 ```
+
+**Windows (PowerShell)**
+```powershell
+python -m venv .venv; .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python scripts\index_project.py --root projects\synthetic-test-project --name synthetic
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+**Web UI** (separate terminal)
+```bash
+cd frontend && npm install && npm run dev                 # http://localhost:5173
+```
+Set `CODEXRAY_API_URL=http://localhost:<port>` if the API isn't on 8000.
+
+**Fully offline** (no model server): `set/export CODEXRAY_LLM_PROVIDER=echo` and
+`CODEXRAY_EMBEDDING_PROVIDER=hashing` — everything except real LLM answers works.
+
+> Java AST parsing uses `tree-sitter` + `tree-sitter-java` (wheels for 3.10–3.13). If neither
+> installs, the indexer automatically falls back to a regex Java parser.
 
 ## Design rules (do not violate)
 
