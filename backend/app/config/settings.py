@@ -202,9 +202,9 @@ def get_settings() -> Settings:
             model=os.environ.get("CODEXRAY_LLM_MODEL", llm.get("model", "qwen2.5-coder:7b")),
             host=os.environ.get("CODEXRAY_LLM_HOST", llm.get("host", "http://localhost:11434")),
             temperature=float(llm.get("temperature", 0.1)),
-            context_length=int(llm.get("context_length", 32768)),
+            context_length=int(llm.get("context_length", 8192)),
             max_tokens=int(llm.get("max_tokens", 1024)),
-            request_timeout_s=float(llm.get("request_timeout_s", 120)),
+            request_timeout_s=float(llm.get("request_timeout_s", 300)),
             context_char_budget=int(llm.get("context_char_budget", 12000)),
         ),
         embedding=EmbeddingConfig(

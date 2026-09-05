@@ -39,9 +39,11 @@ llm:                         # Sprint 3 — local inference
   model: ${CODEXRAY_LLM_MODEL:-qwen2.5-coder:7b}
   host: ${CODEXRAY_LLM_HOST:-http://localhost:11434}
   temperature: 0.1
-  context_length: 32768        # num_ctx passed to the model
+  context_length: 8192         # num_ctx passed to the model. On CPU/24 GB keep this
+                               # modest — the KV cache for 32k context can exhaust RAM
+                               # and make Ollama return HTTP 500. Raise only if needed.
   max_tokens: 1024             # cap on generated tokens per answer
-  request_timeout_s: 120       # CPU inference on 24 GB RAM can be slow
+  request_timeout_s: 300       # CPU inference (esp. first cold load) can be slow
   context_char_budget: 12000   # max chars of assembled evidence in the prompt
 
 embedding:                   # Sprint 4 — semantic retrieval

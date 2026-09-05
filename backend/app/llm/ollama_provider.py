@@ -84,19 +84,32 @@ class OllamaProvider(LLMProvider):
         try:
             with self._client() as c:
                 r = c.post("/api/chat", json=payload)
-                if r.status_code == 404:
-                    raise LLMUnavailable(
-                        f"Ollama has no model '{self.cfg.model}'. Run:  ollama pull {self.cfg.model}"
-                    )
-                r.raise_for_status()
-                data = r.json()
-        except LLMUnavailable:
-            raise
         except Exception as exc:
+            # genuine connectivity failure (nothing listening, DNS, timeout)
             raise LLMUnavailable(
-                f"cannot reach Ollama at {self.host} ({exc}). "
-                f"Start it with `ollama serve` and `ollama pull {self.cfg.model}`."
+                f"cannot connect to Ollama at {self.host} ({exc}). "
+                f"Make sure Ollama is running and reachable."
             )
+
+        if r.status_code == 404:
+            raise LLMUnavailable(
+                f"Ollama has no model '{self.cfg.model}'. Run:  ollama pull {self.cfg.model}"
+            )
+        if r.status_code >= 400:
+            # Ollama is reachable but the request failed — surface its own reason.
+            body = r.text.strip()[:400]
+            hint = ""
+            if "memory" in body.lower() or "out of memory" in body.lower() or r.status_code == 500:
+                hint = (
+                    f" — this often means the model + context does not fit in RAM. "
+                    f"Lower `llm.context_length` (try 8192 or 4096) in config/config.yaml, "
+                    f"or use a smaller model."
+                )
+            raise LLMUnavailable(
+                f"Ollama returned HTTP {r.status_code} for /api/chat with model "
+                f"'{self.cfg.model}' (num_ctx={self.cfg.context_length}): {body}{hint}"
+            )
+        data = r.json()
 
         duration = time.perf_counter() - started
         message = (data.get("message") or {}).get("content", "")
