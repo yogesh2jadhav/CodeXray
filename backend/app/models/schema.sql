@@ -285,7 +285,24 @@ CREATE TABLE IF NOT EXISTS chunks (
 CREATE TABLE IF NOT EXISTS embeddings (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     chunk_id   INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+    project_id INTEGER,
     model      TEXT NOT NULL,
     dim        INTEGER NOT NULL,
-    vector     BLOB NOT NULL
+    vector     BLOB NOT NULL,             -- float32 little-endian, `dim` values
+    norm       REAL NOT NULL DEFAULT 1.0  -- pre-computed L2 norm for cosine
 );
+CREATE INDEX IF NOT EXISTS idx_embeddings_project ON embeddings(project_id);
+
+-- Sprint 4: architecture roles/layers per class (build plan §39).
+CREATE TABLE IF NOT EXISTS architecture_components (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    class_id    INTEGER REFERENCES classes(id) ON DELETE CASCADE,
+    class_name  TEXT NOT NULL,
+    fqn         TEXT,
+    role        TEXT NOT NULL,            -- ENTRY_POINT | CONTROLLER | SERVICE | REPOSITORY | ...
+    layer       TEXT NOT NULL,            -- Service | Processing | Metadata | Data Access | Config | ...
+    file        TEXT,
+    evidence    TEXT                       -- why this role was assigned
+);
+CREATE INDEX IF NOT EXISTS idx_arch_role ON architecture_components(project_id, role);

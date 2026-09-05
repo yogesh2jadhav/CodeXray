@@ -59,8 +59,25 @@ Wired into the indexer (whole-project stage after per-file indexing), persisted 
 `config/config.yaml` (`llm.*`) or `CODEXRAY_LLM_*`. `CODEXRAY_LLM_PROVIDER=echo`
 gives an offline evidence-only response.
 
-Later sprints (graph, embeddings, agent, React UI) are scaffolded as empty
-packages and tracked in `docs/SPRINTS.md`.
+## Status — Sprint 4 (Graph + Semantic Retrieval) ✅
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Graph builder | `backend/app/graph/builder.py` | SQLite index → typed edges in `dependencies` (§57) |
+| Graph service | `backend/app/graph/service.py` | NetworkX; callers/callees/path/table-consumers/class-deps/**impact_analysis** (§19, §41) |
+| Chunker | `backend/app/retrieval/chunker.py` | semantic units — class/method/sql/dynamic_sql/config/doc (§35) |
+| Embeddings | `backend/app/retrieval/embeddings.py` | `OllamaEmbedder` (nomic-embed-text) + offline `HashingEmbedder` (§33) |
+| Vector store | `backend/app/retrieval/vector_store.py` | `SqliteVectorStore` — float32 BLOBs + numpy cosine (§34) |
+| Semantic index | `backend/app/retrieval/semantic.py` | build + search (§23, §58) |
+| Hybrid search | `backend/app/retrieval/hybrid.py` | symbol + keyword + semantic + graph proximity, weighted (§24, §36) |
+| Architecture | `backend/app/analyzers/architecture/extractor.py` | roles/layers, `architecture.json` + `.md` (§39) |
+
+API: `/graph`, `/graph/callers`, `/graph/path`, `/impact-analysis`, `/architecture`
+(`?format=md`), `/search` modes `semantic`+`hybrid`, `/semantic/status`. All three
+build as indexer post-passes. `CODEXRAY_EMBEDDING_PROVIDER=hashing` runs offline.
+
+Later sprints (agent, React UI) are scaffolded as empty packages and tracked in
+`docs/SPRINTS.md`.
 
 ## Quick start
 

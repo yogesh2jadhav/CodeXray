@@ -107,6 +107,8 @@ _RULES: list[tuple[re.Pattern[str], QuestionType, list[RetrievalMode]]] = [
 
 _SYMBOL_RE = re.compile(r"\b([A-Z][A-Za-z0-9]+(?:\.[a-z][A-Za-z0-9]*)?)\b")
 _METHOD_RE = re.compile(r"\b([a-z][A-Za-z0-9]*)\(\)")
+# lowerCamelCase identifiers (loadEligibleCustomers, getPhysicalTable) even without ()
+_CAMEL_RE = re.compile(r"\b([a-z][a-z0-9]*[A-Z][A-Za-z0-9]*)\b")
 _TABLE_RE = re.compile(r"\b([A-Z][A-Z0-9_]{2,})\b")
 _STOP = {"SQL", "API", "AND", "THE", "FROM", "WHERE", "JOIN"}
 # Capitalised English question words that are not code symbols.
@@ -126,6 +128,7 @@ def classify(question: str) -> Classification:
 
     symbols = {s for s in _SYMBOL_RE.findall(question) if s not in _SYMBOL_STOP}
     symbols |= {s for s in _METHOD_RE.findall(question)}
+    symbols |= {s for s in _CAMEL_RE.findall(question)}
     tables = {t for t in _TABLE_RE.findall(question) if t not in _STOP and "." not in t}
     # a bare ALL_CAPS token is more likely a table than a symbol
     symbols -= tables

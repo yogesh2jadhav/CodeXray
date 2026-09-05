@@ -7,12 +7,24 @@ Derived from the build plan §80/§86. Build in order; do not start the UI early
 | 1 | Repository indexer (scan → Java AST → SQL parse → SQLite → search API) | ✅ done | `indexing/`, `analyzers/java`, `analyzers/sql`, `retrieval/search.py`, `api/routes.py` |
 | 2 | Dynamic SQL analyzer (constant/variable/method-return/StringBuilder resolvers, metadata-query detection, `dynamic_sql*` tables, `trace_dynamic_sql`) | ✅ done | `analyzers/dynamic_sql/`, `analyzers/metadata/` |
 | 3 | Local LLM (Ollama provider abstraction, PromptBuilder, ContextBuilder, ResponseParser, `/ask`) | ✅ done | `llm/` |
-| 4 | Project graph + hybrid semantic retrieval (NetworkX, embeddings via local model, Qdrant, impact analysis, architecture extraction) | ⬜ todo | `graph/`, `retrieval/` |
+| 4 | Project graph + hybrid semantic retrieval (NetworkX, local embeddings, impact analysis, architecture extraction) | ✅ done | `graph/`, `retrieval/`, `analyzers/architecture/` |
 | 5 | AI agent (tool calling loop, `max_iterations`, planners) | ⬜ todo | `agents/` |
 | 6 | React + TypeScript UI (projects, chat+evidence, code viewer, dynamic-SQL trace, graph) | ⬜ todo | `frontend/` |
 | 7 | Evaluation framework (~100 Q synthetic benchmark, model comparison) | ⬜ todo | `tests/eval/` |
 | 8 | Git integration, runtime evidence | ⬜ todo | |
 | 9 | Spark analysis (second project) | ⬜ todo | `analyzers/spark/` |
+
+## Sprint 4 acceptance (all green — `pytest tests/test_sprint4.py`)
+
+- [x] `GraphBuilder` — SQLite index → typed edges in `dependencies` (CONTAINS/IMPORTS/EXTENDS/IMPLEMENTS/CALLS/GENERATES_SQL/READS_TABLE/WRITES_TABLE/METADATA_LOOKUP)
+- [x] `GraphService` (NetworkX) — callers / callees / call_path / table_consumers / class_dependencies / neighbors
+- [x] `impact_analysis(symbol)` (§41) — direct + indirect callers, reachable SQL + tables, tests, explicit unknowns for partially-resolved dynamic SQL
+- [x] Semantic retrieval: `Chunker` (semantic units §35) → `Embedder` (`OllamaEmbedder` nomic-embed-text + offline `HashingEmbedder`) → `SqliteVectorStore` (numpy cosine) → `SemanticIndex`
+- [x] `hybrid_search` — symbol + keyword + semantic + call-graph proximity, configurable weights (§24, §36), deterministic
+- [x] `ArchitectureExtractor` (§39) — role/layer per class, entry points, data access; `architecture.json` + `.md`; persisted to `architecture_components`
+- [x] Wired into the indexer (graph/semantic/architecture post-passes) and the ContextBuilder (IMPACT / SEMANTIC / ARCHITECTURE sections)
+- [x] API: `/graph`, `/graph/callers`, `/graph/path`, `/impact-analysis`, `/architecture` (+ `?format=md`), `/search` modes `semantic`|`hybrid`, `/semantic/status`
+- [x] Live: 40 chunks embedded via nomic-embed-text; impact of `loadEligibleCustomers` → `processCustomer` + `META_TABLE_REGISTRY`/`META_COLUMN_REGISTRY` + dynamic-SQL unknowns
 
 ## Sprint 3 acceptance (all green — `pytest tests/test_sprint3.py`)
 

@@ -60,6 +60,11 @@ class TraceRequest(BaseModel):
     selector: str = Field(..., description="class name, Class.method, table name, or a SQL fragment")
 
 
+class ImpactRequest(BaseModel):
+    symbol: str = Field(..., description="Class, Class.method, method name, or TABLE")
+    depth: int | None = Field(None, description="caller BFS depth (defaults to graph.max_impact_depth)")
+
+
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -113,6 +118,9 @@ def project_status(project_id: int) -> dict:
         "sql_queries": conn.execute("SELECT COUNT(*) FROM sql_queries WHERE project_id=?", (project_id,)).fetchone()[0],
         "symbols": conn.execute("SELECT COUNT(*) FROM symbols WHERE project_id=?", (project_id,)).fetchone()[0],
         "dynamic_sql": conn.execute("SELECT COUNT(*) FROM dynamic_sql WHERE project_id=?", (project_id,)).fetchone()[0],
+        "graph_edges": conn.execute("SELECT COUNT(*) FROM dependencies WHERE project_id=?", (project_id,)).fetchone()[0],
+        "semantic_chunks": conn.execute("SELECT COUNT(*) FROM embeddings WHERE project_id=?", (project_id,)).fetchone()[0],
+        "architecture_components": conn.execute("SELECT COUNT(*) FROM architecture_components WHERE project_id=?", (project_id,)).fetchone()[0],
         "parse_failures": conn.execute("SELECT COUNT(*) FROM parse_failures WHERE project_id=?", (project_id,)).fetchone()[0],
     }
     return {"project": proj, "last_run": dict(run) if run else None, "counts": counts}
@@ -227,6 +235,7 @@ def trace_dynamic_sql(project_id: int, body: TraceRequest) -> dict:
 # --------------------------------------------------------------------------- #
 @router.post("/projects/{project_id}/search")
 def search(project_id: int, body: SearchRequest) -> list[dict]:
+    """mode: keyword (default) | symbol | sql | file | semantic | hybrid."""
     _project_or_404(project_id)
     mode = body.mode.lower()
     if mode == "symbol":
@@ -235,7 +244,53 @@ def search(project_id: int, body: SearchRequest) -> list[dict]:
         return S.search_sql(project_id, body.query, body.limit)
     if mode == "file":
         return S.search_files(project_id, body.query, body.limit)
+    if mode == "semantic":
+        from backend.app.retrieval.semantic import SemanticIndex
+        return SemanticIndex().search(project_id, body.query, k=body.limit)
+    if mode == "hybrid":
+        from backend.app.retrieval.hybrid import hybrid_search
+        return hybrid_search(project_id, body.query, k=body.limit)
     return S.search_keyword(project_id, body.query, body.limit)
+
+
+@router.get("/projects/{project_id}/semantic/status")
+def semantic_status(project_id: int) -> dict:
+    _project_or_404(project_id)
+    from backend.app.retrieval.semantic import SemanticIndex
+    return SemanticIndex().status(project_id)
+
+
+# --------------------------------------------------------------------------- #
+# Dependency graph (build plan §19, §41, §57)
+# --------------------------------------------------------------------------- #
+@router.get("/projects/{project_id}/graph")
+def graph_neighbors(project_id: int, node: str, limit: int = 60) -> dict:
+    """Adjacency (in + out edges) for a node — Class, Class.method, TABLE, file."""
+    _project_or_404(project_id)
+    from backend.app.graph.service import GraphService
+    return GraphService(project_id).neighbors(node, limit)
+
+
+@router.get("/projects/{project_id}/graph/callers")
+def graph_callers(project_id: int, symbol: str) -> dict:
+    _project_or_404(project_id)
+    from backend.app.graph.service import GraphService
+    gs = GraphService(project_id)
+    return {"symbol": symbol, "callers": gs.callers(symbol), "callees": gs.callees(symbol)}
+
+
+@router.get("/projects/{project_id}/graph/path")
+def graph_path(project_id: int, src: str, dst: str) -> dict:
+    _project_or_404(project_id)
+    from backend.app.graph.service import GraphService
+    return {"src": src, "dst": dst, "path": GraphService(project_id).call_path(src, dst)}
+
+
+@router.get("/projects/{project_id}/classes-by-name/{class_name}/dependencies")
+def class_deps(project_id: int, class_name: str) -> dict:
+    _project_or_404(project_id)
+    from backend.app.graph.service import GraphService
+    return GraphService(project_id).class_dependencies(class_name)
 
 
 @router.get("/projects/{project_id}/references")
@@ -276,10 +331,23 @@ def ask(project_id: int, body: AskRequest) -> dict:
 
 
 @router.post("/projects/{project_id}/impact-analysis")
-def impact_analysis(project_id: int) -> dict:
-    raise HTTPException(501, "Impact analysis lands in Sprint 4 (needs the dependency graph).")
+def impact_analysis(project_id: int, body: ImpactRequest) -> dict:
+    """What could be impacted if `symbol` changes (build plan §41): direct +
+    indirect callers, SQL + tables reached, likely tests, and explicit unknowns."""
+    _project_or_404(project_id)
+    from backend.app.graph.service import GraphService
+    return GraphService(project_id).impact_analysis(body.symbol, body.depth).as_dict()
 
 
 @router.get("/projects/{project_id}/architecture")
-def architecture(project_id: int) -> dict:
-    raise HTTPException(501, "Architecture extraction lands in Sprint 4/7.")
+def architecture(project_id: int, format: str = "json") -> dict | str:
+    """Roles, layers, entry points and data-access classes (build plan §39).
+    `?format=md` returns the Markdown rendering."""
+    _project_or_404(project_id)
+    from fastapi.responses import PlainTextResponse
+
+    from backend.app.analyzers.architecture.extractor import ArchitectureExtractor
+    arch = ArchitectureExtractor().extract(project_id)
+    if format == "md":
+        return PlainTextResponse(arch.to_markdown())
+    return arch.as_dict()

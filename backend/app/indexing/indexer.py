@@ -28,9 +28,11 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from backend.app.analyzers.architecture.extractor import ArchitectureExtractor
 from backend.app.analyzers.dynamic_sql.analyzer import DynamicSqlAnalyzer
 from backend.app.analyzers.java.java_parser import parse_java
 from backend.app.config.settings import get_settings
+from backend.app.graph.builder import GraphBuilder
 from backend.app.indexing.config_extractor import extract_config
 from backend.app.indexing.file_scanner import FileScanner
 from backend.app.indexing.index_writer import IndexWriter
@@ -51,6 +53,9 @@ class IndexReport:
     files_skipped: int = 0
     files_failed: int = 0
     dynamic_sql_sites: int = 0
+    graph_edges: int = 0
+    semantic_chunks: int = 0
+    architecture_components: int = 0
     failures: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -63,6 +68,9 @@ class IndexReport:
             "files_skipped": self.files_skipped,
             "files_failed": self.files_failed,
             "dynamic_sql_sites": self.dynamic_sql_sites,
+            "graph_edges": self.graph_edges,
+            "semantic_chunks": self.semantic_chunks,
+            "architecture_components": self.architecture_components,
             "failures": self.failures[:50],
         }
 
@@ -112,6 +120,29 @@ class ProjectIndexer:
             except Exception as exc:  # never fail the run for the optional stage
                 log.exception("dynamic-SQL analysis stage failed")
                 self.writer.record_failure(project_id, "<project>", "dynamic_sql", repr(exc))
+
+        # Sprint 4: dependency graph, semantic index and architecture view are all
+        # derived whole-project views — rebuilt after the facts are in place.
+        if self.settings.graph.enabled:
+            try:
+                report.graph_edges = GraphBuilder(self.writer.conn).build(project_id)
+            except Exception:
+                log.exception("graph build stage failed")
+                self.writer.record_failure(project_id, "<project>", "graph", "graph build failed")
+
+        try:
+            from backend.app.retrieval.semantic import SemanticIndex
+            report.semantic_chunks = SemanticIndex(conn=self.writer.conn).build(project_id)
+        except Exception:
+            log.exception("semantic index stage failed")
+            self.writer.record_failure(project_id, "<project>", "semantic", "semantic index failed")
+
+        try:
+            arch = ArchitectureExtractor(self.writer.conn).extract(project_id)
+            report.architecture_components = len(arch.components)
+        except Exception:
+            log.exception("architecture extraction stage failed")
+            self.writer.record_failure(project_id, "<project>", "architecture", "architecture extraction failed")
 
         status = "ok" if report.files_failed == 0 else "error"
         self.writer.finish_run(run_id, report.files_indexed, report.files_skipped, report.files_failed, status)

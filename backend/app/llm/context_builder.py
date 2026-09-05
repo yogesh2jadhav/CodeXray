@@ -131,6 +131,12 @@ class ContextBuilder:
             sections.append(self._source_snippets(symbol_hits, root))
         if RetrievalMode.GRAPH in modes or RetrievalMode.IMPACT in modes:
             sections.append(self._call_graph(cls, symbol_hits))
+        if RetrievalMode.IMPACT in modes:
+            sections.append(self._impact(cls))
+        if RetrievalMode.SEMANTIC in modes:
+            sections.append(self._semantic(cls))
+        if RetrievalMode.ARCHITECTURE in modes:
+            sections.append(self._architecture())
         if RetrievalMode.SQL in modes or RetrievalMode.DATA_FLOW in modes:
             sections.append(self._sql(cls))
         if RetrievalMode.DATA_FLOW in modes or cls.qtype.value in ("DYNAMIC_SQL", "SQL", "DEBUGGING"):
@@ -261,9 +267,14 @@ class ContextBuilder:
                     filt.append(d)
             sites = filt or sites
         for d in sites[:5]:
+            meta_tables = sorted({
+                t for dep in d["dependencies"] if dep["dependency_type"] == "METADATA_QUERY"
+                for e in dep.get("evidence", []) for t in (e.get("metadata_tables") or [])
+            })
+            suffix = f' — metadata tables: {", ".join(meta_tables)}' if meta_tables else ""
             sec.lines.append(
                 f'- {d["source_class"]}.{d["source_method"]} ({d["file"]}:{d["line"]}) '
-                f'[{d["status"]}, confidence {d["confidence"]}]'
+                f'[{d["status"]}, confidence {d["confidence"]}]{suffix}'
             )
             sec.lines.append(f'    template: {d["sql_template"]}')
             if d["resolved_sql"]:
@@ -278,6 +289,51 @@ class ContextBuilder:
             sec.evidence.append(Evidence(kind="dynamic_sql",
                                          detail=f'{d["source_class"]}.{d["source_method"]} [{d["status"]}]',
                                          file=d["file"], line=d["line"]))
+        return sec
+
+    def _semantic(self, cls: Classification) -> Section:
+        sec = Section("SEMANTICALLY RELATED CODE", priority=3)
+        try:
+            from backend.app.retrieval.semantic import SemanticIndex
+            hits = SemanticIndex(conn=self.conn).search(self.pid, cls.question, k=6)
+        except Exception:
+            return sec
+        for h in hits:
+            if h["score"] < 0.15:
+                continue
+            sec.lines.append(f'- [{h["chunk_type"]}] {h["symbol"]}  ({h["file"]}:{h.get("line_start")})  '
+                             f'score={round(h["score"], 3)}')
+            sec.evidence.append(Evidence(kind="semantic", detail=h["symbol"],
+                                         file=h["file"], line=h.get("line_start")))
+        return sec
+
+    def _impact(self, cls: Classification) -> Section:
+        sec = Section("IMPACT (GRAPH)", priority=2)
+        target = (cls.symbols or cls.tables or [None])[0]
+        if not target:
+            return sec
+        try:
+            from backend.app.graph.service import GraphService
+            res = GraphService(self.pid, conn=self.conn).impact_analysis(target).as_dict()
+        except Exception:
+            return sec
+        sec.lines.append(f'target: {res["target"]}')
+        for label in ("direct_impact", "indirect_impact", "sql_impact", "table_impact", "test_impact", "unknowns"):
+            vals = res.get(label) or []
+            if vals:
+                sec.lines.append(f'{label}: ' + ", ".join(vals[:20]))
+        return sec
+
+    def _architecture(self) -> Section:
+        sec = Section("ARCHITECTURE", priority=3)
+        rows = [dict(r) for r in self.conn.execute(
+            "SELECT class_name, role, layer, file FROM architecture_components WHERE project_id=? "
+            "ORDER BY layer, class_name", (self.pid,))]
+        by_layer: dict[str, list[str]] = {}
+        for r in rows:
+            by_layer.setdefault(r["layer"], []).append(f'{r["class_name"]}({r["role"]})')
+        for layer, members in by_layer.items():
+            sec.lines.append(f'- {layer}: ' + ", ".join(members))
         return sec
 
     def _configuration(self, cls: Classification) -> Section:

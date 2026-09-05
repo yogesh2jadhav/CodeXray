@@ -42,6 +42,8 @@ _MIGRATIONS: list[tuple[str, str, str]] = [
     ("dynamic_sql", "columns_json", "TEXT"),
     ("dynamic_sql_dependencies", "ordinal", "INTEGER NOT NULL DEFAULT 0"),
     ("dynamic_sql_dependencies", "evidence_json", "TEXT"),
+    ("embeddings", "project_id", "INTEGER"),
+    ("embeddings", "norm", "REAL NOT NULL DEFAULT 1.0"),
 ]
 
 

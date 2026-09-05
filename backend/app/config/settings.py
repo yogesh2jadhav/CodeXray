@@ -98,8 +98,24 @@ class LLMConfig:
 
 @dataclass(frozen=True)
 class EmbeddingConfig:
-    provider: str
+    provider: str            # ollama | hashing (hashing = offline, no model)
     model: str
+    host: str
+    dim: int                 # vector dimension for the hashing fallback
+    batch: int
+
+
+@dataclass(frozen=True)
+class GraphConfig:
+    enabled: bool
+    max_impact_depth: int
+
+
+@dataclass(frozen=True)
+class RetrievalConfig:
+    weights: dict[str, float]
+    semantic_top_k: int
+    hybrid_top_k: int
 
 
 @dataclass(frozen=True)
@@ -132,8 +148,10 @@ class Settings:
     embedding: EmbeddingConfig
     agent: AgentConfig
     dynamic_sql: DynamicSqlConfig
+    graph: GraphConfig
+    retrieval: RetrievalConfig
     security: SecurityConfig
-    retrieval_weights: dict[str, float]
+    retrieval_weights: dict[str, float]   # kept for back-compat (== retrieval.weights)
     logging_level: str
     raw: dict[str, Any] = field(repr=False, default_factory=dict)
 
@@ -157,7 +175,10 @@ def get_settings() -> Settings:
     emb = raw.get("embedding", {})
     agent = raw.get("agent", {})
     dsql = raw.get("dynamic_sql", {})
+    graph = raw.get("graph", {})
+    retr = raw.get("retrieval", {})
     sec = raw.get("security", {})
+    weights = {k: float(v) for k, v in retr.get("weights", {}).items()}
 
     return Settings(
         project_root=_resolve_path(raw.get("project", {}).get("root", "./projects")),
@@ -185,20 +206,32 @@ def get_settings() -> Settings:
             context_char_budget=int(llm.get("context_char_budget", 12000)),
         ),
         embedding=EmbeddingConfig(
-            provider=emb.get("provider", "local"),
+            provider=os.environ.get("CODEXRAY_EMBEDDING_PROVIDER", emb.get("provider", "ollama")),
             model=os.environ.get("CODEXRAY_EMBEDDING_MODEL", emb.get("model", "nomic-embed-text")),
+            host=os.environ.get("CODEXRAY_EMBEDDING_HOST", emb.get("host", llm.get("host", "http://localhost:11434"))),
+            dim=int(emb.get("dim", 512)),
+            batch=int(emb.get("batch", 16)),
         ),
         agent=AgentConfig(max_iterations=int(agent.get("max_iterations", 8))),
         dynamic_sql=DynamicSqlConfig(
             max_depth=int(dsql.get("max_depth", 5)),
             enabled=_as_bool(dsql.get("enabled", True), True),
         ),
+        graph=GraphConfig(
+            enabled=_as_bool(graph.get("enabled", True), True),
+            max_impact_depth=int(graph.get("max_impact_depth", 4)),
+        ),
+        retrieval=RetrievalConfig(
+            weights=weights,
+            semantic_top_k=int(retr.get("semantic_top_k", 8)),
+            hybrid_top_k=int(retr.get("hybrid_top_k", 12)),
+        ),
         security=SecurityConfig(
             local_only=_as_bool(os.environ.get("CODEXRAY_LOCAL_ONLY", sec.get("local_only", True)), True),
             redact_secrets=_as_bool(os.environ.get("CODEXRAY_REDACT_SECRETS", sec.get("redact_secrets", True)), True),
             secret_key_patterns=tuple(sec.get("secret_key_patterns", [])),
         ),
-        retrieval_weights={k: float(v) for k, v in raw.get("retrieval", {}).get("weights", {}).items()},
+        retrieval_weights=weights,
         logging_level=str(raw.get("logging", {}).get("level", "INFO")),
         raw=raw,
     )
