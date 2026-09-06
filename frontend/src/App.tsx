@@ -10,7 +10,7 @@
  *   - `SourceContext.open(file, line)` renders a <CodeViewer> panel any page can
  *     trigger from an evidence link.
  */
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api/client";
 import { CodeViewer } from "./components/CodeViewer";
 import { useAsync } from "./hooks/useApi";
@@ -71,25 +71,41 @@ function ProjectWorkspace({ projectId, tab }: { projectId: number; tab: string }
           </Link>
         ))}
       </nav>
+      {/*
+        Every tab panel stays mounted and is hidden with [hidden] rather than
+        conditionally rendered, so a page's inputs and last results survive
+        switching tabs. `key` includes projectId so state resets when the user
+        opens a different project. Panels are lazy on first reveal to avoid
+        fetching data for tabs never opened.
+      */}
       <div className="content">
-        {tab === "" && <Overview projectId={projectId} status={status} />}
-        {tab === "search" && <SearchPage projectId={projectId} />}
-        {tab === "chat" && <ChatPage projectId={projectId} />}
-        {tab === "agent" && <InvestigatePage projectId={projectId} />}
-        {tab === "dynamic-sql" && <DynamicSqlPage projectId={projectId} />}
-        {tab === "architecture" && <ArchitecturePage projectId={projectId} />}
-        {tab === "graph" && <GraphPage projectId={projectId} />}
+        <TabPanel active={tab === ""}><Overview projectId={projectId} status={status} /></TabPanel>
+        <TabPanel active={tab === "search"}><SearchPage key={projectId} projectId={projectId} /></TabPanel>
+        <TabPanel active={tab === "chat"}><ChatPage key={projectId} projectId={projectId} /></TabPanel>
+        <TabPanel active={tab === "agent"}><InvestigatePage key={projectId} projectId={projectId} /></TabPanel>
+        <TabPanel active={tab === "dynamic-sql"}><DynamicSqlPage key={projectId} projectId={projectId} /></TabPanel>
+        <TabPanel active={tab === "architecture"}><ArchitecturePage key={projectId} projectId={projectId} /></TabPanel>
+        <TabPanel active={tab === "graph"}><GraphPage key={projectId} projectId={projectId} /></TabPanel>
       </div>
     </div>
   );
+}
+
+/** Keeps children mounted once first shown; toggles visibility with [hidden]. */
+function TabPanel({ active, children }: { active: boolean; children: ReactNode }) {
+  const seen = useRef(false);
+  if (active) seen.current = true;
+  if (!seen.current) return null;
+  return <div hidden={!active}>{children}</div>;
 }
 
 export function App() {
   const route = useRoute();
   const seg = segments(route);
   const [src, setSrc] = useState<{ file: string; line: number | null } | null>(null);
-  // Close the source panel whenever the tab / project changes.
-  useEffect(() => setSrc(null), [seg[1], seg[2]]);
+  // Close the source panel when switching to a different project (but keep it
+  // open across tab switches, alongside each tab's preserved state).
+  useEffect(() => setSrc(null), [seg[1]]);
 
   let view: ReactNode;
   if (seg[0] === "p" && seg[1]) {
