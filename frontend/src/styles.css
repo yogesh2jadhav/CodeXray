@@ -92,6 +92,44 @@ pre.code .hl { background: rgba(76, 154, 255, .12); display: block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--bg-alt); border: 1px solid var(--border); color: var(--fg-dim); margin-right: 4px; }
 
+/* ---- rendered Markdown answer ---- */
+.answer-card { border-color: var(--accent-dim); }
+.md { line-height: 1.62; font-size: 13.5px; }
+.md > *:first-child { margin-top: 0; }
+.md > *:last-child { margin-bottom: 0; }
+.md-p { margin: 8px 0; }
+.md-h { margin: 18px 0 8px; line-height: 1.3; color: var(--fg); }
+h1.md-h { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 5px; }
+h2.md-h { font-size: 15.5px; color: var(--accent); }
+h3.md-h { font-size: 13px; text-transform: none; letter-spacing: 0; color: var(--accent); }
+h4.md-h { font-size: 12.5px; color: var(--fg-dim); }
+.md strong { color: #fff; font-weight: 650; }
+.md-list { margin: 8px 0; padding-left: 22px; }
+.md-list li { margin: 3px 0; }
+.md-list li::marker { color: var(--accent); }
+.md-hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.md-bq { margin: 10px 0; padding: 4px 12px; border-left: 3px solid var(--accent-dim); color: var(--fg-dim); background: var(--bg-alt); border-radius: 0 4px 4px 0; }
+.md-icode { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 12px; color: #e6c07b; }
+.md-code {
+  position: relative; background: #0c0f13; border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; margin: 12px 0; overflow-x: auto;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+}
+.md-code code { white-space: pre; }
+.md-code-lang {
+  position: absolute; top: 0; right: 0; font-size: 10px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--fg-dim); background: var(--bg-alt);
+  border-left: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  border-radius: 0 8px 0 6px; padding: 2px 8px;
+}
+.md-code .tok-kw  { color: #c678dd; }
+.md-code .tok-str { color: #98c379; }
+.md-code .tok-com { color: #6b7683; font-style: italic; }
+.md-code .tok-num { color: #d19a66; }
+.md .label-FACT { color: var(--good); font-weight: 700; margin-right: 4px; }
+.md .label-INFERENCE { color: var(--accent); font-weight: 700; margin-right: 4px; }
+.md .label-UNKNOWN { color: var(--warn); font-weight: 700; margin-right: 4px; }
+
 .answer { white-space: pre-wrap; line-height: 1.6; }
 .answer .label-FACT { color: var(--good); font-weight: 600; }
 .answer .label-INFERENCE { color: var(--accent); font-weight: 600; }
