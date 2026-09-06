@@ -203,9 +203,9 @@ def get_settings() -> Settings:
             host=os.environ.get("CODEXRAY_LLM_HOST", llm.get("host", "http://localhost:11434")),
             temperature=float(llm.get("temperature", 0.1)),
             context_length=int(llm.get("context_length", 8192)),
-            max_tokens=int(llm.get("max_tokens", 1024)),
+            max_tokens=int(llm.get("max_tokens", 2048)),
             request_timeout_s=float(llm.get("request_timeout_s", 300)),
-            context_char_budget=int(llm.get("context_char_budget", 12000)),
+            context_char_budget=int(llm.get("context_char_budget", 16000)),
         ),
         embedding=EmbeddingConfig(
             provider=os.environ.get("CODEXRAY_EMBEDDING_PROVIDER", emb.get("provider", "ollama")),

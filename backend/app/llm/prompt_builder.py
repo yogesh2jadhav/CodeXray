@@ -71,9 +71,20 @@ _FORMAT_HINTS = {
     QuestionType.GENERAL: "Answer directly and cite evidence.",
 }
 
+_LINE_BY_LINE_HINT = (
+    "Walk through the method body in order using the numbered METHOD SOURCE. "
+    "For each statement (or a small group of tightly-related lines) output:\n"
+    "  Lines N-M:  <quote the code>\n"
+    "    <what it does, why it is there, and any risk / side effect / assumption>\n"
+    "Cover every non-trivial line — declarations, branches, loops, calls, returns, catch blocks. "
+    "Skip only blank lines and pure boilerplate. After the walkthrough add a short 'Summary' "
+    "(purpose, inputs, outputs, key dependencies, SQL touched). Do not invent code that is not shown."
+)
+
 
 def build(question: str, context: BuiltContext) -> tuple[str, str]:
-    hint = _FORMAT_HINTS.get(context.classification.qtype, _FORMAT_HINTS[QuestionType.GENERAL])
+    cls = context.classification
+    hint = _LINE_BY_LINE_HINT if cls.line_by_line else _FORMAT_HINTS.get(cls.qtype, _FORMAT_HINTS[QuestionType.GENERAL])
     user_prompt = (
         f"QUESTION: {question}\n\n"
         f"QUESTION TYPE: {context.classification.qtype.value}\n"

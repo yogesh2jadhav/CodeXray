@@ -42,9 +42,10 @@ llm:                         # Sprint 3 — local inference
   context_length: 8192         # num_ctx passed to the model. On CPU/24 GB keep this
                                # modest — the KV cache for 32k context can exhaust RAM
                                # and make Ollama return HTTP 500. Raise only if needed.
-  max_tokens: 1024             # cap on generated tokens per answer
+  max_tokens: 2048             # cap on generated tokens per answer (line-by-line requests
+                               # auto-raise this to 4096)
   request_timeout_s: 300       # CPU inference (esp. first cold load) can be slow
-  context_char_budget: 12000   # max chars of assembled evidence in the prompt
+  context_char_budget: 16000   # max chars of assembled evidence in the prompt
 
 embedding:                   # Sprint 4 — semantic retrieval
   provider: ${CODEXRAY_EMBEDDING_PROVIDER:-ollama}   # ollama | hashing (offline, no model)

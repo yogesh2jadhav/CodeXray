@@ -128,7 +128,10 @@ class ContextBuilder:
         symbol_hits = self._symbol_hits(cls)
         if symbol_hits:
             sections.append(self._classes_methods(symbol_hits))
-            sections.append(self._source_snippets(symbol_hits, root))
+            if cls.line_by_line:
+                sections.append(self._full_method_source(cls, symbol_hits, root))
+            else:
+                sections.append(self._source_snippets(symbol_hits, root))
         if RetrievalMode.GRAPH in modes or RetrievalMode.IMPACT in modes:
             sections.append(self._call_graph(cls, symbol_hits))
         if RetrievalMode.IMPACT in modes:
@@ -217,6 +220,38 @@ class ContextBuilder:
             snippet = "\n".join(src[start:end])
             sec.lines.append(f'// {h["qualified"]} — {h["file"]}:{start + 1}\n{snippet}')
             sec.evidence.append(Evidence(kind="source", detail=h["qualified"], file=h["file"], line=start + 1))
+        return sec
+
+    def _full_method_source(self, cls: Classification, hits: list[dict], root: Path | None) -> Section:
+        """Full body of the method(s) the question names — for a line-by-line
+        walkthrough the model must see every statement, numbered."""
+        sec = Section("METHOD SOURCE (numbered, complete)", priority=1)
+        if root is None:
+            return sec
+
+        wanted = {s.split(".")[-1].lower() for s in cls.symbols}
+        conn = self.conn
+        rows = []
+        for name in (wanted or {h["qualified"].split(".")[-1].lower() for h in hits if h["kind"] == "method"}):
+            rows += [dict(r) for r in conn.execute(
+                "SELECT m.name, m.line_start, m.line_end, m.signature, c.name AS cname, f.path AS fpath "
+                "FROM methods m LEFT JOIN classes c ON c.id=m.class_id JOIN files f ON f.id=m.file_id "
+                "WHERE m.project_id=? AND lower(m.name)=? LIMIT 3", (self.pid, name))]
+
+        if not rows:  # fall back to the snippet section's behaviour
+            return self._source_snippets(hits, root)
+
+        for r in rows[:2]:
+            p = root / r["fpath"]
+            if not p.is_file():
+                continue
+            src = p.read_text(encoding="utf-8", errors="replace").splitlines()
+            a = max((r["line_start"] or 1) - 1, 0)
+            b = min(r["line_end"] or (a + 400), len(src))
+            numbered = "\n".join(f"{a + i + 1:>5}  {ln}" for i, ln in enumerate(src[a:b]))
+            sec.lines.append(f'// {r["cname"]}.{r["name"]}{r["signature"] or ""} — {r["fpath"]}:{a + 1}-{b}\n{numbered}')
+            sec.evidence.append(Evidence(kind="source", detail=f'{r["cname"]}.{r["name"]}',
+                                         file=r["fpath"], line=r["line_start"]))
         return sec
 
     def _call_graph(self, cls: Classification, hits: list[dict]) -> Section:

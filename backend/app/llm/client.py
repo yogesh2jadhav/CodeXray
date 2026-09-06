@@ -87,11 +87,16 @@ class AskService:
 
         system, user_prompt = prompt_builder.build(question, context)
 
+        # A line-by-line walkthrough needs a much larger answer budget.
+        max_tokens = self.settings.llm.max_tokens
+        if cls.line_by_line:
+            max_tokens = max(max_tokens, 4096)
+
         try:
             resp: LLMResponse = self.provider.generate(
                 system, user_prompt,
                 temperature=self.settings.llm.temperature,
-                max_tokens=self.settings.llm.max_tokens,
+                max_tokens=max_tokens,
             )
         except LLMUnavailable:
             raise

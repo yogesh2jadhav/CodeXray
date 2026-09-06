@@ -198,20 +198,23 @@ class InvestigationAgent:
             blocks.append(f"### tool: {r.tool}  args={json.dumps(r.args, default=str)}\n{body[:3500]}")
         evidence_block = "\n\n".join(blocks)
 
+        hint = prompt_builder._LINE_BY_LINE_HINT if cls.line_by_line \
+            else prompt_builder._FORMAT_HINTS.get(cls.qtype, "")
         user = (
             f"QUESTION: {question}\n\n"
-            f"ANSWER FORMAT: {prompt_builder._FORMAT_HINTS.get(cls.qtype, '')}\n\n"
+            f"ANSWER FORMAT: {hint}\n\n"
             f"--- INVESTIGATION EVIDENCE (read-only tool results) ---\n\n{evidence_block}\n\n"
             f"--- END EVIDENCE ---\n\n"
             f"Answer using ONLY this evidence. Label FACT / INFERENCE / UNKNOWN, cite file:line, "
             f"use the analyzer's dynamic-SQL status verbatim and never invent a table/column. "
             f"Finish with an Evidence: list."
         )
+        max_tokens = max(self.settings.llm.max_tokens, 4096) if cls.line_by_line else self.settings.llm.max_tokens
         try:
             resp = self.provider.generate(
                 prompt_builder.SYSTEM_PROMPT, user,
                 temperature=self.settings.llm.temperature,
-                max_tokens=self.settings.llm.max_tokens,
+                max_tokens=max_tokens,
             )
             return resp.text, resp.as_dict()
         except LLMUnavailable:

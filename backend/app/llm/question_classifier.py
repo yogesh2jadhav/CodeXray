@@ -56,6 +56,7 @@ class Classification:
     modes: list[RetrievalMode]
     symbols: list[str] = field(default_factory=list)
     tables: list[str] = field(default_factory=list)
+    line_by_line: bool = False   # user asked for a statement-by-statement walkthrough
 
     def as_dict(self) -> dict:
         return {
@@ -63,7 +64,16 @@ class Classification:
             "retrieval_modes": [m.value for m in self.modes],
             "symbols": self.symbols,
             "tables": self.tables,
+            "line_by_line": self.line_by_line,
         }
+
+
+_LINE_BY_LINE_RE = re.compile(
+    r"\b(line[-\s]?by[-\s]?line|each line|every line|statement[-\s]by[-\s]statement|"
+    r"walk (me )?through (the |every |each )?(line|statement|method)|"
+    r"explain (each|every) (line|statement)|step[-\s]by[-\s]step through)\b",
+    re.I,
+)
 
 
 # Ordered rules: first match wins. (pattern, type, modes)
@@ -126,6 +136,12 @@ def classify(question: str) -> Classification:
             qtype, modes = t, m
             break
 
+    line_by_line = bool(_LINE_BY_LINE_RE.search(question))
+    if line_by_line:
+        # a line-by-line request is always a code-explanation task
+        qtype = QuestionType.CODE_EXPLANATION
+        modes = [RetrievalMode.SYMBOL, RetrievalMode.GRAPH, RetrievalMode.SQL]
+
     symbols = {s for s in _SYMBOL_RE.findall(question) if s not in _SYMBOL_STOP}
     symbols |= {s for s in _METHOD_RE.findall(question)}
     symbols |= {s for s in _CAMEL_RE.findall(question)}
@@ -139,4 +155,5 @@ def classify(question: str) -> Classification:
         modes=modes,
         symbols=sorted(symbols),
         tables=sorted(tables),
+        line_by_line=line_by_line,
     )
