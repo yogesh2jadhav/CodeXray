@@ -72,19 +72,42 @@ _FORMAT_HINTS = {
 }
 
 _LINE_BY_LINE_HINT = (
-    "Walk through the method body in order using the numbered METHOD SOURCE. "
-    "For each statement (or a small group of tightly-related lines) output:\n"
-    "  Lines N-M:  <quote the code>\n"
-    "    <what it does, why it is there, and any risk / side effect / assumption>\n"
-    "Cover every non-trivial line — declarations, branches, loops, calls, returns, catch blocks. "
-    "Skip only blank lines and pure boilerplate. After the walkthrough add a short 'Summary' "
-    "(purpose, inputs, outputs, key dependencies, SQL touched). Do not invent code that is not shown."
+    "Reproduce the method IN FULL from the numbered METHOD SOURCE, and insert an explanatory "
+    "block comment directly ABOVE each logical section of code. Use exactly this shape:\n\n"
+    "```java\n"
+    "/*\n"
+    " * <one line: what this section does and why>\n"
+    " *\n"
+    " * <optional: the sub-steps, as>\n"
+    " * a. <step>\n"
+    " * b. <step>\n"
+    " */\n"
+    "<the original code of that section, verbatim, same indentation>\n"
+    "```\n\n"
+    "A 'section' is a declaration group, a stream/lambda pipeline, a loop, an if/else branch, "
+    "a try/catch, or a return. Keep EVERY original line of code, in order, unchanged — do not "
+    "rewrite, reformat or simplify it. Cover the whole method. After the annotated code add:\n"
+    "  Summary: purpose · inputs · outputs · key dependencies · SQL/DB touched · risks & assumptions\n"
+    "Do not invent code, fields or SQL that are not in the evidence."
 )
 
 
 def build(question: str, context: BuiltContext) -> tuple[str, str]:
     cls = context.classification
-    hint = _LINE_BY_LINE_HINT if cls.line_by_line else _FORMAT_HINTS.get(cls.qtype, _FORMAT_HINTS[QuestionType.GENERAL])
+    if cls.line_by_line:
+        closing = (
+            "Produce the annotated method exactly as specified in ANSWER FORMAT, using only the "
+            "code shown in the evidence. Then the Summary line, then an Evidence: list of the "
+            "file:line references. Do not add FACT/INFERENCE/UNKNOWN prefixes to the code."
+        )
+        hint = _LINE_BY_LINE_HINT
+    else:
+        closing = (
+            "Answer the question using only the evidence above. Label FACT / INFERENCE / UNKNOWN "
+            "and finish with an Evidence: list."
+        )
+        hint = _FORMAT_HINTS.get(cls.qtype, _FORMAT_HINTS[QuestionType.GENERAL])
+
     user_prompt = (
         f"QUESTION: {question}\n\n"
         f"QUESTION TYPE: {context.classification.qtype.value}\n"
@@ -92,7 +115,6 @@ def build(question: str, context: BuiltContext) -> tuple[str, str]:
         f"--- PROJECT EVIDENCE ({context.project_name}) ---\n\n"
         f"{context.render()}\n\n"
         f"--- END EVIDENCE ---\n\n"
-        f"Answer the question using only the evidence above. Label FACT / INFERENCE / UNKNOWN "
-        f"and finish with an Evidence: list."
+        f"{closing}"
     )
     return SYSTEM_PROMPT, user_prompt
