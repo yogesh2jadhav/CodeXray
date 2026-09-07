@@ -67,11 +67,20 @@ def init_db(path: Path | None = None) -> Path:
     return db_path
 
 
+# Cache: schema already ensured for these DB paths this process.
+_SCHEMA_READY: set[str] = set()
+
+
 def get_connection(path: Path | None = None) -> sqlite3.Connection:
-    """Return a configured connection, initialising the schema if needed."""
+    """Return a configured connection. The schema (all `IF NOT EXISTS`) + additive
+    migrations are applied the first time this process touches a given DB file, so
+    tables added in a later release appear in an existing index without a manual
+    migration step."""
     db_path = path or _db_path()
-    if not db_path.exists():
+    key = str(db_path)
+    if key not in _SCHEMA_READY:
         init_db(db_path)
+        _SCHEMA_READY.add(key)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

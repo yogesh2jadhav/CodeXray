@@ -8,7 +8,7 @@
  * Notes:          No caching / no state — components own that.
  */
 import type {
-  AgentResult, Architecture, AskResult, DynamicSqlSite, FileSource,
+  AgentResult, Architecture, AskResult, DynamicSqlSite, FileSource, FlowTree,
   GraphNeighbors, IndexReport, Project, ProjectStatus, SearchHit, SymbolHit,
 } from "./types";
 
@@ -75,4 +75,9 @@ export const api = {
     req<Record<string, string[]>>(`/projects/${id}/impact-analysis`, {
       method: "POST", body: JSON.stringify({ symbol }),
     }),
+
+  flow: (id: number, method: string, depth?: number) =>
+    req<FlowTree>(
+      `/projects/${id}/flow?method=${encodeURIComponent(method)}${depth ? `&depth=${depth}` : ""}`,
+    ),
 };

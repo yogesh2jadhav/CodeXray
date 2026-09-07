@@ -142,3 +142,25 @@ export interface FileSource {
   language: string;
   content: string;
 }
+
+export interface FlowStep {
+  depth: number;
+  method: string;
+  purpose: string | null;
+  file: string | null;
+  line: number | null;
+  signature: string | null;
+  recursion: boolean;
+  calls: string[];
+  external_calls: string[];
+  sql: { reads: string[]; writes: string[]; metadata_tables: string[]; sql_kinds: string[] };
+}
+
+export interface FlowTree {
+  root: string;
+  found: boolean;
+  max_depth: number;
+  step_count: number;
+  truncated: { depth: boolean; size: boolean };
+  steps: FlowStep[];
+}

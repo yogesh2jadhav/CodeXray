@@ -18,6 +18,7 @@ import { Link, segments, useRoute } from "./router";
 import { ArchitecturePage } from "./pages/ArchitecturePage";
 import { ChatPage } from "./pages/ChatPage";
 import { DynamicSqlPage } from "./pages/DynamicSqlPage";
+import { FlowPage } from "./pages/FlowPage";
 import { GraphPage } from "./pages/GraphPage";
 import { InvestigatePage } from "./pages/InvestigatePage";
 import { Overview } from "./pages/Overview";
@@ -35,6 +36,7 @@ const TABS: [string, string][] = [
   ["search", "Search"],
   ["chat", "Chat"],
   ["agent", "Agent"],
+  ["flow", "Flow"],
   ["dynamic-sql", "Dynamic SQL"],
   ["architecture", "Architecture"],
   ["graph", "Graph"],
@@ -83,6 +85,7 @@ function ProjectWorkspace({ projectId, tab }: { projectId: number; tab: string }
         <TabPanel active={tab === "search"}><SearchPage key={projectId} projectId={projectId} /></TabPanel>
         <TabPanel active={tab === "chat"}><ChatPage key={projectId} projectId={projectId} /></TabPanel>
         <TabPanel active={tab === "agent"}><InvestigatePage key={projectId} projectId={projectId} /></TabPanel>
+        <TabPanel active={tab === "flow"}><FlowPage key={projectId} projectId={projectId} /></TabPanel>
         <TabPanel active={tab === "dynamic-sql"}><DynamicSqlPage key={projectId} projectId={projectId} /></TabPanel>
         <TabPanel active={tab === "architecture"}><ArchitecturePage key={projectId} projectId={projectId} /></TabPanel>
         <TabPanel active={tab === "graph"}><GraphPage key={projectId} projectId={projectId} /></TabPanel>

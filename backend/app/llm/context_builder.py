@@ -297,8 +297,9 @@ class ContextBuilder:
             tail = f'   [{"; ".join(bits)}]' if bits else ""
             rec = "  (recursion — already shown)" if s["recursion"] else ""
             loc = f'{s["file"]}:{s["line"]}' if s["file"] else "?"
-            sec.lines.append(f'{indent}{s["depth"]}. {s["method"]}{s["signature"] or "()"}  ({loc}){tail}{rec}')
-            sec.evidence.append(Evidence(kind="flow", detail=s["method"], file=s["file"], line=s["line"]))
+            purpose = f'  — {s["purpose"]}' if s.get("purpose") else ""
+            sec.lines.append(f'{indent}{s["depth"]}. {s["method"]}{s["signature"] or "()"}  ({loc}){purpose}{tail}{rec}')
+            sec.evidence.append(Evidence(kind="flow", detail=f'{s["method"]}{purpose}', file=s["file"], line=s["line"]))
 
         # full source for the first few methods, in tree order
         if root is not None:

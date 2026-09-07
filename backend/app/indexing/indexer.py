@@ -144,6 +144,13 @@ class ProjectIndexer:
             log.exception("architecture extraction stage failed")
             self.writer.record_failure(project_id, "<project>", "architecture", "architecture extraction failed")
 
+        try:
+            from backend.app.analyzers.summarizer import MethodSummarizer
+            MethodSummarizer(self.writer.conn).run(project_id)
+        except Exception:
+            log.exception("method-summary stage failed")
+            self.writer.record_failure(project_id, "<project>", "summarizer", "method summaries failed")
+
         status = "ok" if report.files_failed == 0 else "error"
         self.writer.finish_run(run_id, report.files_indexed, report.files_skipped, report.files_failed, status)
         self.writer.mark_project_indexed(project_id)

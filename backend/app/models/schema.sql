@@ -306,3 +306,16 @@ CREATE TABLE IF NOT EXISTS architecture_components (
     evidence    TEXT                       -- why this role was assigned
 );
 CREATE INDEX IF NOT EXISTS idx_arch_role ON architecture_components(project_id, role);
+
+-- Flow explanations: one-line purpose per method, generated at index time
+-- (heuristic — javadoc first sentence, else name + SQL/call signals).
+CREATE TABLE IF NOT EXISTS method_summaries (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    method_id   INTEGER REFERENCES methods(id) ON DELETE CASCADE,
+    qualified   TEXT NOT NULL,             -- Class.method
+    summary     TEXT NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'heuristic',   -- javadoc | heuristic
+    UNIQUE (project_id, qualified)
+);
+CREATE INDEX IF NOT EXISTS idx_msum_q ON method_summaries(project_id, qualified);

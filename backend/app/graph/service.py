@@ -145,6 +145,12 @@ class GraphService:
             "WHERE m.project_id=?", (self.pid,),
         ):
             meta[f'{r["cn"]}.{r["mn"]}'] = (r["fp"], r["ls"], r["sig"])
+        summaries = {
+            r["qualified"]: r["summary"]
+            for r in self.conn.execute(
+                "SELECT qualified, summary FROM method_summaries WHERE project_id=?", (self.pid,)
+            )
+        }
 
         seen: set[str] = set()
         order: list[dict] = []
@@ -183,6 +189,7 @@ class GraphService:
             step = {
                 "depth": depth,
                 "method": label,
+                "purpose": summaries.get(label),
                 "file": fp,
                 "line": ls,
                 "signature": sig,

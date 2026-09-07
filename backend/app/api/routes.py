@@ -286,6 +286,30 @@ def graph_path(project_id: int, src: str, dst: str) -> dict:
     return {"src": src, "dst": dst, "path": GraphService(project_id).call_path(src, dst)}
 
 
+@router.get("/projects/{project_id}/flow")
+def flow_tree(project_id: int, method: str, depth: int | None = None, max_methods: int | None = None) -> dict:
+    """Recursive interprocedural call tree from a `Class.method` entry point, with
+    a one-line purpose + SQL/tables per step (build plan §43, §83). Powers the
+    Flow tab's tree view; the same data the LLM narrates in flow mode."""
+    _project_or_404(project_id)
+    from backend.app.config.settings import get_settings
+    from backend.app.graph.service import GraphService
+    cfg = get_settings().flow
+    return GraphService(project_id).call_tree(
+        method, max_depth=depth or cfg.max_depth, max_nodes=max_methods or cfg.max_methods
+    )
+
+
+@router.get("/projects/{project_id}/methods-by-name/{name}/summary")
+def method_summary(project_id: int, name: str) -> dict:
+    _project_or_404(project_id)
+    conn = get_connection()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT qualified, summary, source FROM method_summaries WHERE project_id=? AND "
+        "(qualified=? OR qualified LIKE ?)", (project_id, name, f"%.{name}"))]
+    return {"query": name, "summaries": rows}
+
+
 @router.get("/projects/{project_id}/classes-by-name/{class_name}/dependencies")
 def class_deps(project_id: int, class_name: str) -> dict:
     _project_or_404(project_id)
