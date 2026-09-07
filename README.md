@@ -174,6 +174,9 @@ Set `CODEXRAY_API_URL=http://localhost:<port>` if the API isn't on 8000.
 - **Deterministic first.** Parser → facts, graph → relationships, resolver → resolution,
   LLM → explanation. Unresolved dynamic SQL returns `UNRESOLVED`, never a guessed table.
 - **Read-only.** v1 never modifies source, deletes files, or runs destructive SQL.
+- **Test code is excluded** from the index by default (no `src/test`, `*Test.java`,
+  `*IT.java`, `*Spec.java` in any result). Set `scan.index_tests: true` (or
+  `CODEXRAY_INDEX_TESTS=true`) only if you want test-impact analysis.
 - **Everything configurable** via `config/config.yaml` (see `.env.example`).
 - **Incremental.** Unchanged files (by hash) are not re-parsed.
 

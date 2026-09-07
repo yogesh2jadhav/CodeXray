@@ -29,6 +29,13 @@ scan:
     - __pycache__
   max_file_bytes: 2000000   # skip files larger than this (generated / vendored)
 
+  # Test code is excluded from the index by default — it never appears in Search,
+  # Flow, Graph, Dynamic SQL, Chat/Agent context, or Architecture. Set index_tests
+  # to true (or CODEXRAY_INDEX_TESTS=true) only if you want test-impact analysis.
+  index_tests: false
+  test_dir_names: [test, tests, testing, androidTest, integrationTest, testFixtures]
+  test_name_suffixes: [Test, Tests, TestCase, IT, ITCase, IntegrationTest, Spec]
+
 index:
   database: ${CODEXRAY_INDEX_DB:-data/indexes/codexray.db}
   vector_store: ./data/vectors

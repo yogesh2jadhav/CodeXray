@@ -75,6 +75,9 @@ class ScanConfig:
     doc_extensions: tuple[str, ...]
     ignore_dirs: frozenset[str]
     max_file_bytes: int
+    index_tests: bool                    # False => test sources are skipped entirely
+    test_dir_names: frozenset[str]        # path segments that mark a test tree
+    test_name_suffixes: tuple[str, ...]   # filename stems that mark a test class
 
 
 @dataclass(frozen=True)
@@ -203,6 +206,13 @@ def get_settings() -> Settings:
             doc_extensions=tuple(scan.get("doc_extensions", [])),
             ignore_dirs=frozenset(scan.get("ignore_dirs", [])),
             max_file_bytes=int(scan.get("max_file_bytes", 2_000_000)),
+            index_tests=_as_bool(os.environ.get("CODEXRAY_INDEX_TESTS", scan.get("index_tests", False)), False),
+            test_dir_names=frozenset(scan.get("test_dir_names", [
+                "test", "tests", "testing", "androidTest", "integrationTest", "testFixtures", "src/test",
+            ])),
+            test_name_suffixes=tuple(scan.get("test_name_suffixes", [
+                "Test", "Tests", "TestCase", "IT", "ITCase", "IntegrationTest", "Spec",
+            ])),
         ),
         index=IndexConfig(
             database=_resolve_path(os.environ.get("CODEXRAY_INDEX_DB", index.get("database", "data/indexes/codexray.db"))),

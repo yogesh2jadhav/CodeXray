@@ -121,3 +121,31 @@ def test_symbol_and_table_search(indexed):
 
     callers = S.find_callers(pid, "getPhysicalTable")
     assert any(c["caller_method"] == "loadEligibleCustomers" for c in callers)
+
+
+def test_test_code_is_excluded(tmp_path, monkeypatch):
+    """Test sources (src/test, *Test.java, *IT.java) must never enter the index."""
+    monkeypatch.setenv("CODEXRAY_INDEX_DB", str(tmp_path / "idx.db"))
+    from backend.app.config.settings import get_settings
+    get_settings.cache_clear()
+
+    proj = tmp_path / "proj"
+    (proj / "src/main/java/com/acme").mkdir(parents=True)
+    (proj / "src/test/java/com/acme").mkdir(parents=True)
+    (proj / "src/main/java/com/acme/Widget.java").write_text(
+        "package com.acme; public class Widget { public int calc(){ return 1; } }")
+    (proj / "src/main/java/com/acme/WidgetTest.java").write_text(
+        "package com.acme; public class WidgetTest { public void t(){} }")
+    (proj / "src/test/java/com/acme/WidgetIT.java").write_text(
+        "package com.acme; public class WidgetIT { public void it(){} }")
+
+    from backend.app.indexing.indexer import ProjectIndexer
+    from backend.app.models.database import get_connection
+    ProjectIndexer().index_project("t", proj, force=True)
+    conn = get_connection()
+
+    files = {r["path"] for r in conn.execute("SELECT path FROM files")}
+    classes = {r["name"] for r in conn.execute("SELECT name FROM classes")}
+    assert any("Widget.java" in f for f in files)
+    assert not any("Test" in f or "IT" in f for f in files)
+    assert classes == {"Widget"}
