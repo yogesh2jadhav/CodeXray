@@ -14,6 +14,17 @@ Derived from the build plan §80/§86. Build in order; do not start the UI early
 | 8 | Git integration, runtime evidence | ⬜ todo | |
 | 9 | Spark analysis (second project) | ⬜ todo | `analyzers/spark/` |
 
+## Technical-lead answer modes (Sprint 7.x — build plan §42, §43, §61, §83)
+
+- **Line-by-line** — "explain X line by line" → full numbered method body + a `/* */`-annotated
+  reproduction of the code (context_builder `_full_method_source`, prompt `_LINE_BY_LINE_HINT`).
+- **Recursive flow** — "trace the flow of X end to end" → `GraphService.call_tree()` walks every
+  nested *project* callee (JDBC/stdlib filtered), with the SQL/tables/metadata each step touches;
+  narrated as a numbered human-language walkthrough + arrow diagram + "Data touched" + "Open questions"
+  (context_builder `_execution_flow`, tool `trace_flow`, prompt `_FLOW_HINT`, config `flow.*`).
+  Bounded by `flow.max_depth` / `flow.max_methods`; truncation is stated, never hidden.
+- Both auto-raise the answer token budget to 4096 and work in `/ask` and `/investigate`.
+
 ## Sprint 7 acceptance (all green — `pytest tests/test_sprint7.py`)
 
 - [x] `eval/dataset/synthetic.yaml` — 60 ground-truth cases (arch 12 / java 12 / sql 10 /

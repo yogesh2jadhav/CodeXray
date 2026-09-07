@@ -126,11 +126,13 @@ class ContextBuilder:
         sections: list[Section] = [self._project_summary()]
 
         symbol_hits = self._symbol_hits(cls)
+        if cls.flow:
+            sections.append(self._execution_flow(cls, symbol_hits, root))
         if symbol_hits:
             sections.append(self._classes_methods(symbol_hits))
             if cls.line_by_line:
                 sections.append(self._full_method_source(cls, symbol_hits, root))
-            else:
+            elif not cls.flow:
                 sections.append(self._source_snippets(symbol_hits, root))
         if RetrievalMode.GRAPH in modes or RetrievalMode.IMPACT in modes:
             sections.append(self._call_graph(cls, symbol_hits))
@@ -252,6 +254,67 @@ class ContextBuilder:
             sec.lines.append(f'// {r["cname"]}.{r["name"]}{r["signature"] or ""} — {r["fpath"]}:{a + 1}-{b}\n{numbered}')
             sec.evidence.append(Evidence(kind="source", detail=f'{r["cname"]}.{r["name"]}',
                                          file=r["fpath"], line=r["line_start"]))
+        return sec
+
+    def _execution_flow(self, cls: Classification, hits: list[dict], root: Path | None) -> Section:
+        """Recursive call tree from the starting method + the source of the first
+        few methods, so the model can narrate the whole flow (build plan §43, §83)."""
+        sec = Section("EXECUTION FLOW (recursive call tree)", priority=1)
+        start = None
+        if cls.symbols:
+            start = cls.symbols[0]
+        elif hits:
+            start = next((h["qualified"] for h in hits if h["kind"] == "method"), None)
+        if not start:
+            sec.lines.append("(no starting method identified in the question)")
+            return sec
+
+        from backend.app.graph.service import GraphService
+        cfg = get_settings().flow
+        tree = GraphService(self.pid, conn=self.conn).call_tree(
+            start, max_depth=cfg.max_depth, max_nodes=cfg.max_methods
+        )
+        if not tree.get("found"):
+            sec.lines.append(f"(method '{start}' not found in the call graph)")
+            return sec
+
+        steps = tree["steps"]
+        sec.lines.append(f'root: {tree["root"]}  ·  {tree["step_count"]} methods  ·  depth cap {tree["max_depth"]}')
+        if tree["truncated"]["depth"] or tree["truncated"]["size"]:
+            sec.lines.append("NOTE: the trace was bounded — deeper/other calls exist beyond what is shown.")
+        for s in steps:
+            indent = "  " * s["depth"]
+            sql = s["sql"]
+            bits = []
+            if sql["reads"]:
+                bits.append(f'reads {", ".join(sql["reads"])}')
+            if sql["writes"]:
+                bits.append(f'writes {", ".join(sql["writes"])}')
+            if sql["metadata_tables"]:
+                bits.append(f'metadata {", ".join(sql["metadata_tables"])}')
+            if sql["sql_kinds"]:
+                bits.append("+".join(sql["sql_kinds"]) + " SQL")
+            tail = f'   [{"; ".join(bits)}]' if bits else ""
+            rec = "  (recursion — already shown)" if s["recursion"] else ""
+            loc = f'{s["file"]}:{s["line"]}' if s["file"] else "?"
+            sec.lines.append(f'{indent}{s["depth"]}. {s["method"]}{s["signature"] or "()"}  ({loc}){tail}{rec}')
+            sec.evidence.append(Evidence(kind="flow", detail=s["method"], file=s["file"], line=s["line"]))
+
+        # full source for the first few methods, in tree order
+        if root is not None:
+            sec.lines.append("")
+            sec.lines.append("--- source of the first methods in the flow ---")
+            for s in steps[: cfg.full_source_methods]:
+                if not s["file"]:
+                    continue
+                p = root / s["file"]
+                if not p.is_file():
+                    continue
+                src = p.read_text(encoding="utf-8", errors="replace").splitlines()
+                a = max((s["line"] or 1) - 1, 0)
+                b = min(a + 60, len(src))
+                body = "\n".join(f"{a + i + 1:>5}  {ln}" for i, ln in enumerate(src[a:b]))
+                sec.lines.append(f'\n// {s["method"]} — {s["file"]}:{a + 1}\n{body}')
         return sec
 
     def _call_graph(self, cls: Classification, hits: list[dict]) -> Section:

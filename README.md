@@ -121,6 +121,19 @@ python scripts/run_eval.py --project synthetic --mode agent --compare qwen2.5-co
 - Baseline (`docs/EVAL_BASELINE.md`): 60/60, all deterministic metrics 1.00;
   `qwen2.5-coder:7b` on dynamic-SQL cases → 0.00 hallucination
 
+## Answer modes (Chat & Agent)
+
+Phrase the question and CodeXray adapts the format:
+
+| Ask like this | You get |
+|---|---|
+| "Explain `X` **line by line**" | the full method reproduced with `/* … */` comments above each block |
+| "**Trace the flow** of `X` **end to end**" / "follow the nested calls" | `GraphService.call_tree` walks every nested *project* method (JDBC/stdlib filtered), and the LLM narrates the whole flow step-by-step + an arrow diagram + which tables are read/written + open questions. Bounded by `flow.max_depth`/`flow.max_methods`; truncation is always stated. |
+| anything else | the normal structured or agentic answer |
+
+Deep enterprise flows: the deterministic call tree is exact; the model narrates it.
+If a flow exceeds `flow.max_methods` the trace says so — narrow it ("trace `X` to `Y`").
+
 Next sprints (git, Spark) are tracked in `docs/SPRINTS.md`.
 
 ## Quick start

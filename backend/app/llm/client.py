@@ -87,9 +87,9 @@ class AskService:
 
         system, user_prompt = prompt_builder.build(question, context)
 
-        # A line-by-line walkthrough needs a much larger answer budget.
+        # A line-by-line walkthrough or a full-flow narration needs a bigger budget.
         max_tokens = self.settings.llm.max_tokens
-        if cls.line_by_line:
+        if cls.line_by_line or cls.flow:
             max_tokens = max(max_tokens, 4096)
 
         try:

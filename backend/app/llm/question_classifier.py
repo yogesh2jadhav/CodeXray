@@ -56,7 +56,8 @@ class Classification:
     modes: list[RetrievalMode]
     symbols: list[str] = field(default_factory=list)
     tables: list[str] = field(default_factory=list)
-    line_by_line: bool = False   # user asked for a statement-by-statement walkthrough
+    line_by_line: bool = False   # statement-by-statement walkthrough of one method
+    flow: bool = False           # recursive end-to-end flow trace from a starting method
 
     def as_dict(self) -> dict:
         return {
@@ -65,13 +66,22 @@ class Classification:
             "symbols": self.symbols,
             "tables": self.tables,
             "line_by_line": self.line_by_line,
+            "flow": self.flow,
         }
 
 
 _LINE_BY_LINE_RE = re.compile(
     r"\b(line[-\s]?by[-\s]?line|each line|every line|statement[-\s]by[-\s]statement|"
     r"walk (me )?through (the |every |each )?(line|statement|method)|"
-    r"explain (each|every) (line|statement)|step[-\s]by[-\s]step through)\b",
+    r"explain (each|every) (line|statement))\b",
+    re.I,
+)
+
+_FLOW_RE = re.compile(
+    r"\b(end[-\s]?to[-\s]?end|full flow|whole flow|entire flow|trace (the |this )?(flow|process|"
+    r"execution|call|path)|follow (the |all )?(calls|call chain|nested (method|function)|method calls)|"
+    r"recursive(ly)? (into|through)|from (the )?(entry ?point|start(ing)?( method)?) to (the )?(db|database|end)|"
+    r"explain (the |this )?(full |complete |entire )?(flow|process|pipeline)|step[-\s]by[-\s]step through)\b",
     re.I,
 )
 
@@ -137,7 +147,12 @@ def classify(question: str) -> Classification:
             break
 
     line_by_line = bool(_LINE_BY_LINE_RE.search(question))
-    if line_by_line:
+    flow = bool(_FLOW_RE.search(question))
+    if flow:
+        qtype = QuestionType.CODE_EXPLANATION
+        modes = [RetrievalMode.DATA_FLOW, RetrievalMode.GRAPH, RetrievalMode.SYMBOL, RetrievalMode.SQL]
+        line_by_line = False  # flow narration takes precedence over per-line
+    elif line_by_line:
         # a line-by-line request is always a code-explanation task
         qtype = QuestionType.CODE_EXPLANATION
         modes = [RetrievalMode.SYMBOL, RetrievalMode.GRAPH, RetrievalMode.SQL]
@@ -156,4 +171,5 @@ def classify(question: str) -> Classification:
         symbols=sorted(symbols),
         tables=sorted(tables),
         line_by_line=line_by_line,
+        flow=flow,
     )

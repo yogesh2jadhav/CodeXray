@@ -138,3 +138,34 @@ def test_investigate_503_when_model_down(indexed, monkeypatch):
     c = TestClient(app)
     r = c.post(f"/api/projects/{indexed.project_id}/investigate", json={"question": "Explain CustomerService."})
     assert r.status_code == 503
+
+
+# ------------------------------------------------------- recursive flow trace
+def test_trace_flow_tool_and_classifier(indexed):
+    from backend.app.llm.question_classifier import classify
+    c = classify("Trace the full flow of processCustomer end to end from the entry point to the database")
+    assert c.flow and "processCustomer" in c.symbols
+
+    from backend.app.agents.tools import ToolRegistry
+    r = ToolRegistry(indexed.project_id).run("trace_flow", {"method": "processCustomer"})
+    assert r.ok and r.data["found"]
+    methods = {s["method"] for s in r.data["steps"]}
+    # recursive descent reaches the metadata + dynamic-SQL layer
+    assert {"CustomerService.processCustomer", "CustomerService.loadEligibleCustomers",
+            "MetadataService.getPhysicalTable", "DynamicQueryBuilder.buildWithConcat"} <= methods
+    # JDBC / stdlib calls are filtered out of the project call tree
+    assert "prepareStatement" not in methods and "executeQuery" not in methods
+    # metadata tables are attached to the dynamic-SQL step
+    load = next(s for s in r.data["steps"] if s["method"] == "CustomerService.loadEligibleCustomers")
+    assert set(load["sql"]["metadata_tables"]) == {"META_TABLE_REGISTRY", "META_COLUMN_REGISTRY"}
+
+
+def test_flow_context_section(indexed):
+    from backend.app.llm.context_builder import ContextBuilder
+    from backend.app.llm.question_classifier import classify
+    ctx = ContextBuilder(indexed.project_id).build(
+        classify("trace the process flow from processCustomer to the database"))
+    rendered = ctx.render()
+    assert "EXECUTION FLOW" in rendered
+    assert "CustomerService.loadEligibleCustomers" in rendered
+    assert "META_TABLE_REGISTRY" in rendered

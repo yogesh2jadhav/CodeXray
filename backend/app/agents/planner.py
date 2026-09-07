@@ -103,6 +103,16 @@ def plan(cls: Classification) -> list[ToolCall]:
             add("get_method", {"name": sym}, "the implementing method")
         add("search_sql", {"query": kw or q}, "rule expressed in SQL")
 
+    elif cls.flow:
+        target = sym or _first(cls.symbols, "")
+        if target:
+            add("search_symbol", {"name": target}, "locate the starting method")
+            add("trace_flow", {"method": target}, "recursive end-to-end call tree")
+            add("trace_dynamic_sql", {"selector": target}, "any dynamic SQL in the flow")
+            add("get_method", {"name": target}, "read the entry method")
+        else:
+            add("search_code", {"query": kw or q}, "find the entry point")
+
     else:  # CODE_EXPLANATION / GENERAL
         if sym:
             add("search_symbol", {"name": sym}, "resolve the symbol")

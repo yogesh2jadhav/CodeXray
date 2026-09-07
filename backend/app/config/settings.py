@@ -112,6 +112,16 @@ class GraphConfig:
 
 
 @dataclass(frozen=True)
+class FlowConfig:
+    # "trace this flow" walkthroughs: how deep to recurse through callees, the
+    # hard cap on methods in one trace, and how many of them get full source in
+    # the prompt (the rest get signature + a one-line role).
+    max_depth: int
+    max_methods: int
+    full_source_methods: int
+
+
+@dataclass(frozen=True)
 class RetrievalConfig:
     weights: dict[str, float]
     semantic_top_k: int
@@ -151,6 +161,7 @@ class Settings:
     agent: AgentConfig
     dynamic_sql: DynamicSqlConfig
     graph: GraphConfig
+    flow: FlowConfig
     retrieval: RetrievalConfig
     security: SecurityConfig
     retrieval_weights: dict[str, float]   # kept for back-compat (== retrieval.weights)
@@ -178,6 +189,7 @@ def get_settings() -> Settings:
     agent = raw.get("agent", {})
     dsql = raw.get("dynamic_sql", {})
     graph = raw.get("graph", {})
+    flow = raw.get("flow", {})
     retr = raw.get("retrieval", {})
     sec = raw.get("security", {})
     weights = {k: float(v) for k, v in retr.get("weights", {}).items()}
@@ -217,7 +229,7 @@ def get_settings() -> Settings:
         agent=AgentConfig(
             max_iterations=int(agent.get("max_iterations", 8)),
             enable_llm_planning=_as_bool(agent.get("enable_llm_planning", True), True),
-            tool_result_char_limit=int(agent.get("tool_result_char_limit", 4000)),
+            tool_result_char_limit=int(agent.get("tool_result_char_limit", 8000)),
         ),
         dynamic_sql=DynamicSqlConfig(
             max_depth=int(dsql.get("max_depth", 5)),
@@ -226,6 +238,11 @@ def get_settings() -> Settings:
         graph=GraphConfig(
             enabled=_as_bool(graph.get("enabled", True), True),
             max_impact_depth=int(graph.get("max_impact_depth", 4)),
+        ),
+        flow=FlowConfig(
+            max_depth=int(flow.get("max_depth", 4)),
+            max_methods=int(flow.get("max_methods", 25)),
+            full_source_methods=int(flow.get("full_source_methods", 6)),
         ),
         retrieval=RetrievalConfig(
             weights=weights,

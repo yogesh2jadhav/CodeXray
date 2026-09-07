@@ -188,6 +188,19 @@ def _trace_call_path(project_id: int, src: str, dst: str) -> dict:
             "evidence": [_ev("path", " -> ".join(path))] if path else []}
 
 
+def _trace_flow(project_id: int, method: str, max_depth: int | None = None) -> dict:
+    """Recursive end-to-end call tree from `method`: every nested callee (bounded),
+    plus the SQL / tables / metadata each step touches."""
+    from backend.app.config.settings import get_settings
+    from backend.app.graph.service import GraphService
+    cfg = get_settings().flow
+    tree = GraphService(project_id).call_tree(
+        method, max_depth=max_depth or cfg.max_depth, max_nodes=cfg.max_methods
+    )
+    ev = [_ev("flow", f'{s["method"]} (depth {s["depth"]})', s["file"], s["line"]) for s in tree.get("steps", [])[:12]]
+    return tree | {"evidence": ev}
+
+
 def _find_references(project_id: int, symbol: str) -> dict:
     return _find_callers(project_id, symbol)
 
@@ -296,6 +309,10 @@ _TOOLS: list[Tool] = [
          {"symbol": "string (required)"}, _find_references),
     Tool("trace_call_path", "Shortest call path between two methods.",
          {"src": "string (required)", "dst": "string (required)"}, _trace_call_path),
+    Tool("trace_flow", "Recursive end-to-end call tree from a starting method: every nested "
+                       "callee (bounded by flow.max_depth/max_methods) with the SQL, tables and "
+                       "metadata lookups each step touches.",
+         {"method": "string (required): Class.method or method name", "max_depth": "int (optional)"}, _trace_flow),
     Tool("get_class_dependencies", "What a class depends on and what depends on it.",
          {"name": "string (required)"}, _get_class_dependencies),
     Tool("search_sql", "Search SQL queries by text / table / column.",

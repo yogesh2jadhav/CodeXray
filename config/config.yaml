@@ -58,10 +58,15 @@ graph:                       # Sprint 4 — dependency graph
   enabled: true
   max_impact_depth: 4        # BFS depth for impact_analysis()
 
+flow:                        # "trace this flow end to end" walkthroughs
+  max_depth: 4               # how deep to recurse through nested method calls
+  max_methods: 25            # hard cap on methods in one trace (protects context)
+  full_source_methods: 6     # first N methods get full source in the prompt; rest get a summary
+
 agent:                       # Sprint 5 — tool-calling investigation agent
   max_iterations: 8          # extra LLM-requested tool rounds after the deterministic seed plan
   enable_llm_planning: true  # false => run only the seed plan (fast, fully deterministic)
-  tool_result_char_limit: 4000
+  tool_result_char_limit: 8000
 
 dynamic_sql:                  # Sprint 2 — dynamic SQL reconstruction
   enabled: true

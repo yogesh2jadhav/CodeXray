@@ -92,8 +92,36 @@ _LINE_BY_LINE_HINT = (
 )
 
 
+_FLOW_HINT = (
+    "Narrate the full execution flow in plain language, following the EXECUTION FLOW "
+    "call tree in order. Number each step:\n"
+    "  1. <Class.method> — <what happens here, in one or two sentences: what it receives, "
+    "what it does, what it calls next, what data/DB/SQL it touches>\n"
+    "Recurse into nested calls exactly as the tree shows; when the tree marks a branch as "
+    "bounded or recursive, say so rather than guessing. Use the analyzer's dynamic-SQL status "
+    "verbatim and never invent a table/column. End with:\n"
+    "  - a compact arrow diagram of the flow (A -> B -> C ...)\n"
+    "  - 'Data touched:' the tables read/written and where\n"
+    "  - 'Open questions:' anything not statically determinable."
+)
+
+
 def build(question: str, context: BuiltContext) -> tuple[str, str]:
     cls = context.classification
+    if cls.flow:
+        closing = (
+            "Narrate the flow as specified in ANSWER FORMAT using only the EXECUTION FLOW tree "
+            "and the source shown. Finish with the arrow diagram, 'Data touched:' and "
+            "'Open questions:' sections, then an Evidence: list."
+        )
+        hint = _FLOW_HINT
+        user_prompt = (
+            f"QUESTION: {question}\n\nQUESTION TYPE: {cls.qtype.value}\n"
+            f"ANSWER FORMAT: {hint}\n\n"
+            f"--- PROJECT EVIDENCE ({context.project_name}) ---\n\n{context.render()}\n\n"
+            f"--- END EVIDENCE ---\n\n{closing}"
+        )
+        return SYSTEM_PROMPT, user_prompt
     if cls.line_by_line:
         closing = (
             "Produce the annotated method exactly as specified in ANSWER FORMAT, using only the "

@@ -128,6 +128,89 @@ class GraphService:
         node = self.resolve(name)
         return [parse_node_id(n)[1] for n in self._edges_of(node, CALL_EDGES, incoming=False)] if node else []
 
+    def call_tree(self, root: str, max_depth: int = 4, max_nodes: int = 30) -> dict:
+        """Ordered interprocedural call tree from `root` (DFS over CALLS edges),
+        with the SQL / tables / metadata each method touches. Recursion and the
+        depth/size caps are marked so the caller (and the LLM) know the flow was
+        bounded, not that it ends there."""
+        start = self.resolve(root)
+        if start is None:
+            return {"root": root, "found": False, "steps": []}
+
+        # method-node -> (file, line, signature)
+        meta: dict[str, tuple[str | None, int | None, str | None]] = {}
+        for r in self.conn.execute(
+            "SELECT c.name AS cn, m.name AS mn, m.signature AS sig, m.line_start AS ls, f.path AS fp "
+            "FROM methods m LEFT JOIN classes c ON c.id=m.class_id JOIN files f ON f.id=m.file_id "
+            "WHERE m.project_id=?", (self.pid,),
+        ):
+            meta[f'{r["cn"]}.{r["mn"]}'] = (r["fp"], r["ls"], r["sig"])
+
+        seen: set[str] = set()
+        order: list[dict] = []
+        truncated = {"depth": False, "size": False}
+
+        def sql_touched(mnode: str) -> dict:
+            tables_r, tables_w, meta_tables, statuses = set(), set(), set(), set()
+            for _, sqln, k in self.g.out_edges(mnode, keys=True):
+                if k != EdgeType.GENERATES_SQL.value:
+                    continue
+                statuses.add("dynamic" if parse_node_id(sqln)[1].startswith("d") else "static")
+                for _, tbl, tk in self.g.out_edges(sqln, keys=True):
+                    name = parse_node_id(tbl)[1]
+                    if tk == EdgeType.WRITES_TABLE.value:
+                        tables_w.add(name)
+                    elif tk == EdgeType.METADATA_LOOKUP.value:
+                        meta_tables.add(name)
+                    elif tk == EdgeType.READS_TABLE.value:
+                        tables_r.add(name)
+            return {"reads": sorted(tables_r), "writes": sorted(tables_w),
+                    "metadata_tables": sorted(meta_tables), "sql_kinds": sorted(statuses)}
+
+        def visit(mnode: str, depth: int) -> None:
+            if len(order) >= max_nodes:
+                truncated["size"] = True
+                return
+            label = parse_node_id(mnode)[1]
+            recursion = mnode in seen
+            seen.add(mnode)
+            fp, ls, sig = meta.get(label, (None, None, None))
+            raw_callees = [v for _, v, k in self.g.out_edges(mnode, keys=True) if k == EdgeType.CALLS.value]
+            # only follow callees that are methods DEFINED in this project (drop JDBC /
+            # stdlib / framework calls that would flood the tree)
+            callees = sorted({c for c in raw_callees if parse_node_id(c)[1] in meta})
+            external = sorted({parse_node_id(c)[1] for c in raw_callees if parse_node_id(c)[1] not in meta})
+            step = {
+                "depth": depth,
+                "method": label,
+                "file": fp,
+                "line": ls,
+                "signature": sig,
+                "recursion": recursion,
+                "calls": [parse_node_id(c)[1] for c in callees],
+                "external_calls": external[:12],
+                "sql": sql_touched(mnode),
+            }
+            order.append(step)
+            if recursion:
+                return
+            if depth >= max_depth:
+                if callees:
+                    truncated["depth"] = True
+                return
+            for c in callees:
+                visit(c, depth + 1)
+
+        visit(start, 0)
+        return {
+            "root": parse_node_id(start)[1],
+            "found": True,
+            "max_depth": max_depth,
+            "truncated": truncated,
+            "step_count": len(order),
+            "steps": order,
+        }
+
     def call_path(self, src: str, dst: str) -> list[str] | None:
         a, b = self.resolve(src), self.resolve(dst)
         if not a or not b:
