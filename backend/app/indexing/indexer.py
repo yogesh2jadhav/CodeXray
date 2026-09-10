@@ -166,12 +166,21 @@ class ProjectIndexer:
                 self.writer.record_failure(project_id, sf.rel_path, java.parser, java.error)
             symbols = extract_symbols(java)
             self.writer.write_java(project_id, file_id, java, symbols)
-            sql_occ = extract_from_java_file(text, java)
-            if sql_occ:
-                self.writer.write_sql(project_id, file_id, sql_occ)
+            # SQL extraction must not sink a file whose Java structure parsed fine.
+            try:
+                sql_occ = extract_from_java_file(text, java)
+                if sql_occ:
+                    self.writer.write_sql(project_id, file_id, sql_occ)
+            except Exception as exc:
+                log.warning("SQL extraction failed for %s: %s", sf.rel_path, exc)
+                self.writer.record_failure(project_id, sf.rel_path, "sql", repr(exc))
 
         elif sf.language == Language.SQL:
-            self.writer.write_sql(project_id, file_id, extract_from_sql_file(text))
+            try:
+                self.writer.write_sql(project_id, file_id, extract_from_sql_file(text))
+            except Exception as exc:
+                log.warning("SQL file parse failed for %s: %s", sf.rel_path, exc)
+                self.writer.record_failure(project_id, sf.rel_path, "sql", repr(exc))
 
         elif sf.language == Language.CONFIG:
             self.writer.write_config(project_id, file_id, extract_config(text, sf.extension))

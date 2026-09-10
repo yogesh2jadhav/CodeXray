@@ -149,3 +149,18 @@ def test_test_code_is_excluded(tmp_path, monkeypatch):
     assert any("Widget.java" in f for f in files)
     assert not any("Test" in f or "IT" in f for f in files)
     assert classes == {"Widget"}
+
+
+def test_sql_parser_never_raises_on_odd_sql():
+    """A malformed / dialect-specific statement must degrade, not crash indexing."""
+    from backend.app.analyzers.sql.sql_parser import parse_sql
+    odd = [
+        "SELECT COLUMN_VALUE FROM TABLE(some_fn(:x))",   # sqlglot: Table.this is None
+        "INSERT INTO t SELECT * FROM",
+        "SELECT /*+ HINT */ a FROM b WHERE ROWNUM < 5",
+        "MERGE INTO t USING s ON (t.id=s.id) WHEN MATCHED THEN UPDATE SET t.v=s.v",
+        "!! not sql at all ((",
+    ]
+    for s in odd:
+        r = parse_sql(s)               # must return, never raise
+        assert r.raw_sql == s
