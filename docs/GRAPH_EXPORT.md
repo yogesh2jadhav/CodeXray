@@ -22,18 +22,29 @@ Relationships: `CONTAINS`, `IMPORTS`, `EXTENDS`, `IMPLEMENTS`, `CALLS`,
 
 ## Neo4j
 
+Run an instance any way you like — **Neo4j Desktop** (GUI, Windows/Mac), **Neo4j
+Community** (ZIP, `bin/neo4j console`), or `docker compose up -d neo4j`. Note the
+connection URI (Desktop shows it, e.g. `neo4j://127.0.0.1:7687`) and the password.
+
 ```bash
-docker compose up -d neo4j                       # http://localhost:7474  (neo4j / codexray)
+# load directly over bolt — best for a real codebase  (pip install neo4j)
+python scripts/export_graph.py --project myapp --format cypher --load \
+    --uri neo4j://127.0.0.1:7687 --user neo4j --password YOUR_PASSWORD
 
-# option A — write a file, load it in Neo4j Browser (paste) or cypher-shell
+# or: write a file and run it with cypher-shell (ships with Neo4j, in bin/)
 python scripts/export_graph.py --project myapp --format cypher --out graph.cypher
-cypher-shell -u neo4j -p codexray -f graph.cypher
-
-# option B — load directly over bolt  (pip install neo4j)
-NEO4J_PASSWORD=codexray python scripts/export_graph.py --project myapp --format cypher --load
+cypher-shell -a neo4j://127.0.0.1:7687 -u neo4j -p YOUR_PASSWORD -f graph.cypher
 ```
 
-Or from the UI: **Graph** tab → *Export the whole graph* → **Neo4j (.cypher)**.
+Small projects only: open the `.cypher` file and paste it into the Neo4j Desktop
+**Query** tool (or the old Neo4j Browser). Don't paste thousands of statements —
+use `--load`.
+
+From the UI: **Graph** tab → *Export the whole graph* → **Neo4j (.cypher)** downloads
+the file; run it as above.
+
+`--uri` / `--user` / `--password` also read from `NEO4J_URI` / `NEO4J_USER` /
+`NEO4J_PASSWORD` if you prefer env vars.
 
 ### Useful Cypher
 

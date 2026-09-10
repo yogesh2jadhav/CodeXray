@@ -50,17 +50,19 @@ def main() -> int:
     ap.add_argument("--project", required=True)
     ap.add_argument("--format", choices=["cypher", "graphml", "dot", "json"], default="cypher")
     ap.add_argument("--out", help="output file (default: stdout, or graph.<ext>)")
-    ap.add_argument("--load", action="store_true", help="cypher only: push straight into Neo4j via bolt")
+    ap.add_argument("--load", action="store_true", help="push straight into Neo4j via bolt (needs `pip install neo4j`)")
+    ap.add_argument("--uri", default=os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
+                    help="Neo4j connection URI (e.g. neo4j://127.0.0.1:7687)")
+    ap.add_argument("--user", default=os.environ.get("NEO4J_USER", "neo4j"))
+    ap.add_argument("--password", default=os.environ.get("NEO4J_PASSWORD", "neo4j"))
+    ap.add_argument("--include-external", action="store_true",
+                    help="keep JDBC / framework classes and calls in the graph")
     args = ap.parse_args()
 
-    exp = GraphExporter(_project_id(args.project))
+    exp = GraphExporter(_project_id(args.project), include_external=args.include_external)
 
     if args.load:
-        res = exp.push_to_neo4j(
-            os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
-            os.environ.get("NEO4J_USER", "neo4j"),
-            os.environ.get("NEO4J_PASSWORD", "neo4j"),
-        )
+        res = exp.push_to_neo4j(args.uri, args.user, args.password)
         print(json.dumps(res, indent=2))
         return 0
 

@@ -36,8 +36,10 @@ export function GraphPage({ projectId }: { projectId: number }) {
         <a href={exportUrl("dot")}>Graphviz (.dot)</a> ·{" "}
         <a href={exportUrl("json")} target="_blank" rel="noreferrer">cytoscape JSON</a>
         <div className="muted" style={{ marginTop: 4 }}>
-          Neo4j: <span className="mono">docker compose up -d neo4j</span>, then load the .cypher in Neo4j Browser
-          (or <span className="mono">scripts/export_graph.py --load</span>).
+          Neo4j: start an instance (Neo4j Desktop or Community — no Docker needed), then{" "}
+          <span className="mono">
+            scripts/export_graph.py --project X --format cypher --load --uri neo4j://127.0.0.1:7687 --password …
+          </span>
         </div>
       </div>
 
