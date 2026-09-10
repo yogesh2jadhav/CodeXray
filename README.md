@@ -76,6 +76,12 @@ API: `/graph`, `/graph/callers`, `/graph/path`, `/impact-analysis`, `/architectu
 (`?format=md`), `/search` modes `semantic`+`hybrid`, `/semantic/status`. All three
 build as indexer post-passes. `CODEXRAY_EMBEDDING_PROVIDER=hashing` runs offline.
 
+**Graph export** — the whole graph (modules · packages · classes · methods · tables · SQL)
+to **Neo4j** (`.cypher`), GraphML, Graphviz `.dot`, or cytoscape JSON:
+`scripts/export_graph.py --project X --format cypher [--load]`,
+`GET /api/projects/{id}/graph/export?format=…`, or the **Graph** tab's export links.
+`docker compose up -d neo4j` for a local instance. See `docs/GRAPH_EXPORT.md`.
+
 ## Status — Sprint 5 (Investigation Agent) ✅
 
 | Component | File | Purpose |

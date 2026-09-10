@@ -29,5 +29,9 @@ numpy==2.1.3
 pytest==8.3.3
 httpx==0.27.2
 
-# Later sprints (kept here for reference, not yet required):
-#   qdrant-client (swap-in vector store), sentence-transformers (alt embedder), gitpython (Sprint 8)
+# Optional extras (not required to run CodeXray):
+#   neo4j          — only for `scripts/export_graph.py --load` (direct bolt import).
+#                    The .cypher / .graphml / .dot exports work without it.
+#   qdrant-client  — swap-in vector store
+#   sentence-transformers — alternative embedder
+#   gitpython      — Sprint 8 (git integration)

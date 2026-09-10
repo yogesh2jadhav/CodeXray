@@ -317,6 +317,50 @@ def class_deps(project_id: int, class_name: str) -> dict:
     return GraphService(project_id).class_dependencies(class_name)
 
 
+@router.get("/projects/{project_id}/graph/export")
+def graph_export(project_id: int, format: str = "cypher"):
+    """Export the whole graph (modules / packages / classes / methods / tables /
+    SQL) for Neo4j (`cypher`), Gephi/yEd/Cytoscape (`graphml`), Graphviz (`dot`),
+    or cytoscape.js (`json`). Build plan §19 — Neo4j is an optional target."""
+    _project_or_404(project_id)
+    from fastapi.responses import JSONResponse, PlainTextResponse
+
+    from backend.app.graph.export import GraphExporter
+    exp = GraphExporter(project_id)
+    fmt = format.lower()
+    if fmt == "cypher":
+        return PlainTextResponse(exp.to_cypher(), media_type="text/plain",
+                                 headers={"Content-Disposition": "attachment; filename=codexray-graph.cypher"})
+    if fmt == "graphml":
+        return PlainTextResponse(exp.to_graphml(), media_type="application/xml",
+                                 headers={"Content-Disposition": "attachment; filename=codexray-graph.graphml"})
+    if fmt == "dot":
+        return PlainTextResponse(exp.to_dot(), media_type="text/vnd.graphviz",
+                                 headers={"Content-Disposition": "attachment; filename=codexray-graph.dot"})
+    if fmt == "json":
+        return JSONResponse(exp.to_cytoscape_json())
+    raise HTTPException(400, "format must be one of: cypher | graphml | dot | json")
+
+
+class Neo4jLoad(BaseModel):
+    uri: str = "bolt://localhost:7687"
+    user: str = "neo4j"
+    password: str
+
+
+@router.post("/projects/{project_id}/graph/export/neo4j")
+def graph_export_neo4j(project_id: int, body: Neo4jLoad) -> dict:
+    """Push the graph straight into a running Neo4j instance (needs `pip install neo4j`)."""
+    _project_or_404(project_id)
+    from backend.app.graph.export import GraphExporter
+    try:
+        return GraphExporter(project_id).push_to_neo4j(body.uri, body.user, body.password)
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:  # connection refused, auth, …
+        raise HTTPException(502, f"Neo4j load failed: {exc}")
+
+
 @router.get("/projects/{project_id}/references")
 def references(project_id: int, symbol: str) -> dict:
     _project_or_404(project_id)

@@ -122,3 +122,37 @@ def test_sprint4_endpoints(indexed):
 
     r = c.post(f"/api/projects/{pid}/search", json={"query": "metadata table lookup", "mode": "semantic", "limit": 5})
     assert r.status_code == 200 and r.json()
+
+
+# --------------------------------------------------------------- graph export
+def test_graph_export_formats(indexed):
+    from backend.app.graph.export import GraphExporter
+    exp = GraphExporter(indexed.project_id)
+
+    kinds = {n.kind for n in exp.nodes.values()}
+    assert {"Module", "Package", "Class", "Method", "Table", "SqlQuery"} <= kinds
+    # JDBC / stdlib types are filtered out by default
+    labels = {n.label for n in exp.nodes.values()}
+    assert "ArrayList" not in labels and "Connection" not in labels
+    assert {"CustomerService", "MetadataService", "DynamicQueryBuilder"} <= labels
+
+    cy = exp.to_cypher()
+    assert "MERGE (n:Method {id:" in cy and "MERGE (a)-[:CALLS]->(b)" in cy
+    assert exp.to_graphml().startswith("<?xml")
+    assert exp.to_dot().startswith("digraph codexray {")
+    j = exp.to_cytoscape_json()
+    assert j["stats"]["nodes"] == len(exp.nodes) and j["elements"]["edges"]
+
+    # a Method node carries its one-line purpose + class
+    m = next(n for n in exp.nodes.values() if n.label == "CustomerService.loadEligibleCustomers")
+    assert m.props.get("class") == "CustomerService" and m.props.get("purpose")
+
+
+def test_graph_export_endpoint(indexed):
+    from fastapi.testclient import TestClient
+    from backend.app.main import app
+    c = TestClient(app)
+    r = c.get(f"/api/projects/{indexed.project_id}/graph/export", params={"format": "cypher"})
+    assert r.status_code == 200 and "MERGE" in r.text
+    r = c.get(f"/api/projects/{indexed.project_id}/graph/export", params={"format": "json"})
+    assert r.status_code == 200 and r.json()["stats"]["nodes"] > 10

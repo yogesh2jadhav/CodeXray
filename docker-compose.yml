@@ -1,0 +1,30 @@
+# Optional Neo4j instance for visualising / querying the CodeXray dependency graph.
+# CodeXray itself does NOT need this — SQLite + NetworkX are the source of truth
+# (build plan §19). Use it only if you want the Neo4j Browser / Bloom experience.
+#
+#   docker compose up -d neo4j
+#   # then load a project's graph:
+#   python scripts/export_graph.py --project <name> --format cypher --out graph.cypher
+#   # open http://localhost:7474  (user: neo4j / pass: codexray), or:
+#   NEO4J_PASSWORD=codexray python scripts/export_graph.py --project <name> --format cypher --load
+#
+# Browse:  MATCH (m:Module)-[:CONTAINS*]->(x) RETURN *   LIMIT 300
+#          MATCH p=(:Method {name:'CustomerService.processCustomer'})-[:CALLS*1..6]->(:Method) RETURN p
+#          MATCH (:Method)-[:GENERATES_SQL]->(:DynamicSql)-[:METADATA_LOOKUP]->(t:Table) RETURN *
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: codexray-neo4j
+    ports:
+      - "7474:7474"   # HTTP / Browser
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/codexray
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_max__size: 1G
+    volumes:
+      - neo4j-data:/data
+
+volumes:
+  neo4j-data:

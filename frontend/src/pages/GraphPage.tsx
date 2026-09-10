@@ -23,9 +23,24 @@ export function GraphPage({ projectId }: { projectId: number }) {
     impact.run(n).catch(() => {});
   };
 
+  const exportUrl = (fmt: string) => `/api/projects/${projectId}/graph/export?format=${fmt}`;
+
   return (
     <div>
       <h1>Dependency Graph</h1>
+
+      <div className="card small">
+        <strong>Export the whole graph</strong> (modules · packages · classes · methods · tables · SQL) —{" "}
+        <a href={exportUrl("cypher")}>Neo4j (.cypher)</a> ·{" "}
+        <a href={exportUrl("graphml")}>GraphML (Gephi/yEd)</a> ·{" "}
+        <a href={exportUrl("dot")}>Graphviz (.dot)</a> ·{" "}
+        <a href={exportUrl("json")} target="_blank" rel="noreferrer">cytoscape JSON</a>
+        <div className="muted" style={{ marginTop: 4 }}>
+          Neo4j: <span className="mono">docker compose up -d neo4j</span>, then load the .cypher in Neo4j Browser
+          (or <span className="mono">scripts/export_graph.py --load</span>).
+        </div>
+      </div>
+
       <div className="row" style={{ marginBottom: 12 }}>
         <input
           type="text"
