@@ -251,25 +251,48 @@ class GraphExporter:
     def push_to_neo4j(self, uri: str, user: str, password: str, wipe: bool = True) -> dict:
         try:
             from neo4j import GraphDatabase
+            from neo4j.exceptions import ServiceUnavailable
         except Exception as exc:  # pragma: no cover
-            raise RuntimeError("pip install neo4j to load directly, or use format=cypher and cypher-shell") from exc
+            raise RuntimeError("pip install neo4j to load directly, or use --format cypher and cypher-shell") from exc
 
-        driver = GraphDatabase.driver(uri, auth=(user, password))
-        with driver.session() as session:
-            if wipe:
-                session.run("MATCH (n) WHERE n.codexray_project = $p DETACH DELETE n", p=self.pid)
-            for n in self.nodes.values():
-                session.run(
-                    f"MERGE (x:`{n.kind}` {{id:$id}}) SET x += $props, x.codexray_project=$p",
-                    id=n.id, props={"name": n.label, **n.props}, p=self.pid,
-                )
-            for e in self.edges:
-                session.run(
-                    f"MATCH (a {{id:$s}}),(b {{id:$d}}) MERGE (a)-[:`{e.type}`]->(b)",
-                    s=e.src, d=e.dst,
-                )
-        driver.close()
-        return {"loaded": True, "nodes": len(self.nodes), "edges": len(self.edges), "uri": uri}
+        # `neo4j://` forces a cluster routing-table lookup that a single Desktop /
+        # Community instance does not serve — retry once over a direct `bolt://`.
+        candidates = [uri]
+        if uri.startswith("neo4j://"):
+            candidates.append("bolt://" + uri[len("neo4j://"):])
+        elif uri.startswith("neo4j+s://"):
+            candidates.append("bolt+s://" + uri[len("neo4j+s://"):])
+
+        last_err: Exception | None = None
+        for u in candidates:
+            driver = GraphDatabase.driver(u, auth=(user, password))
+            try:
+                driver.verify_connectivity()
+                with driver.session() as session:
+                    if wipe:
+                        session.run("MATCH (n) WHERE n.codexray_project = $p DETACH DELETE n", p=self.pid)
+                    for n in self.nodes.values():
+                        session.run(
+                            f"MERGE (x:`{n.kind}` {{id:$id}}) SET x += $props, x.codexray_project=$p",
+                            id=n.id, props={"name": n.label, **n.props}, p=self.pid,
+                        )
+                    for e in self.edges:
+                        session.run(
+                            f"MATCH (a {{id:$s}}),(b {{id:$d}}) MERGE (a)-[:`{e.type}`]->(b)",
+                            s=e.src, d=e.dst,
+                        )
+                driver.close()
+                return {"loaded": True, "nodes": len(self.nodes), "edges": len(self.edges), "uri": u}
+            except Exception as exc:  # ServiceUnavailable, ConfigurationError, auth…
+                last_err = exc
+                driver.close()
+
+        raise RuntimeError(
+            f"could not connect to Neo4j at {uri}"
+            + (f" (also tried {candidates[1]})" if len(candidates) > 1 else "")
+            + f": {last_err}. Is the instance started? Check the port, and prefer bolt://<host>:7687 "
+            f"for a single Desktop/Community instance."
+        )
 
 
 # --------------------------------------------------------------------- helpers
