@@ -140,6 +140,21 @@ Phrase the question and CodeXray adapts the format:
 Deep enterprise flows: the deterministic call tree is exact; the model narrates it.
 If a flow exceeds `flow.max_methods` the trace says so — narrow it ("trace `X` to `Y`").
 
+## Project documentation generator (build plan §37, §61)
+
+Auto-generate a `project_summary.md` from the index — purpose, architecture, key
+classes with one-line purposes, SQL/dynamic-SQL picture, non-secret config,
+external dependencies, and known hotspots (heavily-depended-on methods,
+unresolved dynamic SQL, parse failures):
+
+```bash
+python scripts/generate_docs.py --project myapp --out project_summary.md
+python scripts/generate_docs.py --project myapp --llm     # + a local-LLM purpose paragraph
+```
+Or `GET /api/projects/{id}/documentation` (`?format=json`, `?llm=true`), or the
+**Overview** tab's documentation links. Purely deterministic by default; the
+`--llm` paragraph degrades to a heuristic sentence if no model is available.
+
 Next sprints (git, Spark) are tracked in `docs/SPRINTS.md`.
 
 ## Quick start

@@ -25,6 +25,14 @@ export function Overview({ projectId, status }: { projectId: number; status: Sta
     <div style={{ maxWidth: 820 }}>
       <h1>Overview</h1>
 
+      <div className="card small">
+        <strong>Project documentation</strong> — an auto-generated summary (purpose, architecture,
+        key classes, SQL/dynamic-SQL picture, config, dependencies, hotspots) built from this index —{" "}
+        <a href={`/api/projects/${projectId}/documentation`}>Markdown</a> ·{" "}
+        <a href={`/api/projects/${projectId}/documentation?llm=true`}>Markdown + LLM purpose paragraph</a> ·{" "}
+        <a href={`/api/projects/${projectId}/documentation?format=json`} target="_blank" rel="noreferrer">JSON</a>
+      </div>
+
       <div className="row" style={{ marginBottom: 12 }}>
         <button disabled={reindex.pending} onClick={async () => { await reindex.run(false); status.reload(); }}>
           {reindex.pending ? "indexing…" : "Re-index (incremental)"}

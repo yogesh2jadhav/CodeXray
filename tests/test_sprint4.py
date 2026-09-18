@@ -156,3 +156,40 @@ def test_graph_export_endpoint(indexed):
     assert r.status_code == 200 and "MERGE" in r.text
     r = c.get(f"/api/projects/{indexed.project_id}/graph/export", params={"format": "json"})
     assert r.status_code == 200 and r.json()["stats"]["nodes"] > 10
+
+
+# --------------------------------------------------------- project documentation
+def test_project_documentation_generator(indexed):
+    from backend.app.analyzers.documentation.generator import ProjectDocGenerator
+    doc = ProjectDocGenerator(indexed.project_id).generate(use_llm=False)
+
+    assert doc.purpose_source == "heuristic" and doc.purpose
+    assert doc.counts["classes"] == 5 and doc.counts["sql_queries"] > 0
+    assert "com.acme.customer" in {p["package"] for p in doc.packages}
+
+    # class-level purposes come from real javadoc, not a constructor stub
+    md_repo = next(c for c in doc.key_classes["Data Access"] if c["name"] == "CustomerRepository")
+    assert md_repo["purpose"] and "constructor" not in md_repo["purpose"].lower()
+
+    # dependency grouping collapses to top-level packages (java.sql, not java.sql.Connection)
+    dep_names = {d["name"] for d in doc.dependencies}
+    assert "java.sql" in dep_names and not any(d.count(".") > 1 for d in dep_names)
+
+    # hotspots never include JDBC/stdlib bare-name calls
+    assert not any("executeQuery" in h or "prepareStatement" in h for h in doc.hotspots)
+    assert any("metadata lookups" in h for h in doc.hotspots)
+
+    md = doc.to_markdown()
+    assert md.startswith("# synthetic — Project Summary")
+    assert "## Dynamic SQL" in md and "META_TABLE_REGISTRY" in md
+
+
+def test_project_documentation_endpoint(indexed):
+    from fastapi.testclient import TestClient
+    from backend.app.main import app
+    c = TestClient(app)
+    r = c.get(f"/api/projects/{indexed.project_id}/documentation")
+    assert r.status_code == 200 and r.text.startswith("# synthetic")
+
+    r = c.get(f"/api/projects/{indexed.project_id}/documentation", params={"format": "json"})
+    assert r.status_code == 200 and r.json()["counts"]["classes"] == 5

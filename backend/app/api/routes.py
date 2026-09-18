@@ -448,3 +448,24 @@ def architecture(project_id: int, format: str = "json") -> dict | str:
     if format == "md":
         return PlainTextResponse(arch.to_markdown())
     return arch.as_dict()
+
+
+@router.get("/projects/{project_id}/documentation")
+def project_documentation(project_id: int, format: str = "md", llm: bool = False):
+    """Auto-generated project summary document (build plan §37/§61): purpose,
+    architecture, key classes with their one-line purposes, SQL/dynamic-SQL
+    picture, configuration, external dependencies, and known hotspots — all
+    from the deterministic index. `?llm=true` asks the local model for a short
+    purpose paragraph (falls back to a heuristic one if no model is available).
+    `?format=json` returns the structured form instead of Markdown."""
+    _project_or_404(project_id)
+    from fastapi.responses import PlainTextResponse
+
+    from backend.app.analyzers.documentation.generator import ProjectDocGenerator
+    doc = ProjectDocGenerator(project_id).generate(use_llm=llm)
+    if format == "json":
+        return doc.as_dict()
+    return PlainTextResponse(
+        doc.to_markdown(),
+        headers={"Content-Disposition": f"attachment; filename={doc.project}-summary.md"},
+    )
