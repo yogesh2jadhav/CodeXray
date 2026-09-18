@@ -80,4 +80,7 @@ export const api = {
     req<FlowTree>(
       `/projects/${id}/flow?method=${encodeURIComponent(method)}${depth ? `&depth=${depth}` : ""}`,
     ),
+
+  documentationModules: (id: number) =>
+    req<{ module: string; class_count: number }[]>(`/projects/${id}/documentation/modules`),
 };

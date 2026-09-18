@@ -193,3 +193,52 @@ def test_project_documentation_endpoint(indexed):
 
     r = c.get(f"/api/projects/{indexed.project_id}/documentation", params={"format": "json"})
     assert r.status_code == 200 and r.json()["counts"]["classes"] == 5
+
+
+# ------------------------------------------------- scoped / large-project docs
+def test_documentation_module_scoping(indexed):
+    from backend.app.analyzers.documentation.generator import ProjectDocGenerator
+    gen = ProjectDocGenerator(indexed.project_id)
+
+    mods = gen.list_modules()
+    assert mods and mods[0]["module"] == "com.acme" and mods[0]["class_count"] == 5
+
+    full = gen.generate(use_llm=False)
+    scoped = gen.generate(use_llm=False, package_prefix="com.acme.customer")
+
+    # scoping narrows SQL to what's attributable to classes in that package —
+    # the .sql-file-origin queries and CUSTOMER_ADDRESS table drop out
+    assert scoped.counts["sql_queries"] < full.counts["sql_queries"]
+    assert "CUSTOMER_ADDRESS" not in scoped.sql_summary["tables"]
+    assert scoped.scope == "com.acme.customer"
+    assert "com.acme.customer module" in scoped.purpose
+
+    md = scoped.to_markdown()
+    assert md.startswith("# synthetic — com.acme.customer")
+
+
+def test_documentation_caps_are_honest(indexed):
+    """Every list capped for a large doc must report shown vs total, never
+    silently drop data."""
+    from backend.app.analyzers.documentation.generator import ProjectDoc
+
+    doc = ProjectDoc(
+        project="p", generated_at="now", scope=None, purpose="x", purpose_source="heuristic",
+        counts={"classes": 5000}, packages=[{"package": "a", "class_count": 1}], packages_total=500,
+        is_large=True,
+    )
+    md = doc.to_markdown()
+    assert "Large codebase" in md
+    assert "499 more package(s)" in md
+
+
+def test_documentation_modules_endpoint(indexed):
+    from fastapi.testclient import TestClient
+    from backend.app.main import app
+    c = TestClient(app)
+    r = c.get(f"/api/projects/{indexed.project_id}/documentation/modules")
+    assert r.status_code == 200 and r.json()[0]["module"] == "com.acme"
+
+    r = c.get(f"/api/projects/{indexed.project_id}/documentation",
+              params={"package": "com.acme.customer", "format": "json"})
+    assert r.status_code == 200 and r.json()["scope"] == "com.acme.customer"

@@ -6,9 +6,10 @@
  *                 SQL / graph edges / semantic chunks / parse failures), the last
  *                 run, and a "Re-index" button that reports the IndexReport.
  */
+import { useState } from "react";
 import { api } from "../api/client";
 import { ErrorBox, Loading, Spinner } from "../components/common";
-import { useAction } from "../hooks/useApi";
+import { useAction, useAsync } from "../hooks/useApi";
 import type { ProjectStatus } from "../api/types";
 
 interface StatusHook {
@@ -20,6 +21,12 @@ interface StatusHook {
 
 export function Overview({ projectId, status }: { projectId: number; status: StatusHook }) {
   const reindex = useAction((force: boolean) => api.index(projectId, force));
+  const large = (status.data?.counts.classes ?? 0) > 300;
+  const [pkg, setPkg] = useState("");
+  const modules = useAsync(
+    () => (large ? api.documentationModules(projectId) : Promise.resolve([])),
+    [projectId, large],
+  );
 
   return (
     <div style={{ maxWidth: 820 }}>
@@ -31,6 +38,30 @@ export function Overview({ projectId, status }: { projectId: number; status: Sta
         <a href={`/api/projects/${projectId}/documentation`}>Markdown</a> ·{" "}
         <a href={`/api/projects/${projectId}/documentation?llm=true`}>Markdown + LLM purpose paragraph</a> ·{" "}
         <a href={`/api/projects/${projectId}/documentation?format=json`} target="_blank" rel="noreferrer">JSON</a>
+
+        {large && (
+          <div style={{ marginTop: 8 }}>
+            <div className="muted">
+              {status.data?.counts.classes} classes — a single document can't show everything. Pick a
+              module for a focused doc:
+            </div>
+            <div className="row" style={{ marginTop: 4 }}>
+              <select value={pkg} onChange={(e) => setPkg(e.target.value)} style={{ maxWidth: 320 }}>
+                <option value="">{modules.loading ? "loading modules…" : "choose a module"}</option>
+                {(modules.data ?? []).map((m) => (
+                  <option key={m.module} value={m.module}>
+                    {m.module} ({m.class_count})
+                  </option>
+                ))}
+              </select>
+              {pkg && (
+                <a href={`/api/projects/${projectId}/documentation?package=${encodeURIComponent(pkg)}`}>
+                  download {pkg} doc
+                </a>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="row" style={{ marginBottom: 12 }}>

@@ -155,6 +155,23 @@ Or `GET /api/projects/{id}/documentation` (`?format=json`, `?llm=true`), or the
 **Overview** tab's documentation links. Purely deterministic by default; the
 `--llm` paragraph degrades to a heuristic sentence if no model is available.
 
+**Large codebases** (hundreds to thousands of classes): one flat document can't
+show everything readably, so every list that could be huge (packages, config,
+SQL tables, dependencies) is capped with an honest "+N more" note — the true
+totals are always in the payload, nothing is silently dropped. Past
+`LARGE_PROJECT_CLASS_THRESHOLD` (300 classes) the doc says so and points at the
+per-module tools instead (build plan §38 "Hierarchical Project Memory"):
+```bash
+python scripts/generate_docs.py --project myapp --list-modules
+python scripts/generate_docs.py --project myapp --package com.acme.billing
+python scripts/generate_docs.py --project myapp --all-modules --out docs/myapp-modules
+```
+`--package` scopes the whole document (counts, key classes, SQL, dynamic SQL,
+dependencies, hotspots) to one Java package prefix. `--all-modules` writes one
+doc per top-level package. Same via the API: `GET /projects/{id}/documentation
+/modules` to list, `?package=` on `/documentation` to scope. The Overview tab
+shows the module picker automatically once a project crosses the threshold.
+
 Next sprints (git, Spark) are tracked in `docs/SPRINTS.md`.
 
 ## Quick start

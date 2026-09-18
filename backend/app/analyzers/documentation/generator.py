@@ -3,87 +3,126 @@ backend/app/analyzers/documentation/generator.py
 
 Purpose
 -------
-Generate a project-level summary document after indexing (build plan §37
-"Project Summary Memory" / §61 "Documentation Generation").
+Generate project (and, at scale, per-module) summary documents after indexing
+(build plan §37 "Project Summary Memory" / §38 "Hierarchical Project Memory" /
+§61 "Documentation Generation").
 
 Responsibility
 --------------
-Assemble one Markdown document entirely from deterministic facts already in the
-index — architecture (roles/layers), packages, key classes with their one-line
-purposes, the SQL/dynamic-SQL picture, non-secret configuration, external
-dependencies, and "known hotspots" (heavily-depended-on classes, unresolved
-dynamic SQL, parse failures). Optionally prepends a short LLM-written purpose
-paragraph synthesised *from those same facts* — never from guessing — and
-degrades silently to a one-line heuristic purpose if no local model is available.
+- `ProjectDocGenerator.generate()` assembles one Markdown/JSON document entirely
+  from deterministic facts already in the index — architecture (roles/layers),
+  packages, key classes with one-line purposes, the SQL/dynamic-SQL picture,
+  non-secret configuration, external dependencies, and "known hotspots".
+- On a **large** codebase a single flat document cannot show everything and
+  stay readable, so every list that could be huge (packages, config, SQL
+  tables, dependencies) is capped with an honest "+N more, not shown" note —
+  never silently truncated, and the true totals are always in the payload.
+- `generate(package_prefix=...)` scopes the whole document to one module (a
+  Java package prefix) — the §38 "Level 2: module/package overview". Use
+  `list_modules()` to discover what modules exist, and `generate_all_modules()`
+  to write one doc per module for a codebase this generator alone can't
+  usefully summarise in one file (roughly: >300 classes).
+- Optional `use_llm=True` asks the local model for a short purpose paragraph
+  built only from the facts already gathered; degrades silently to a heuristic
+  sentence if no model is available (never fails doc generation).
 
-This is a read-only report generator: it never touches source code, only the
-index. Re-running it after a re-index reflects the current state exactly.
+Read-only: this only queries the index, never touches source code.
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 
 from backend.app.analyzers.architecture.extractor import Architecture, ArchitectureExtractor
 from backend.app.models.database import get_connection
 
 log = logging.getLogger("codexray.docgen")
 
-_MAX_HOTSPOTS = 10
+# Large-codebase guardrails: cap what a single document renders, but always
+# report the true total alongside the cap so nothing is silently hidden.
+_MAX_HOTSPOTS_SHOWN = 5
 _MAX_KEY_CLASSES_PER_LAYER = 12
+_MAX_PACKAGES_SHOWN = 60
+_MAX_CONFIG_SHOWN = 200
+_MAX_TABLES_SHOWN = 40
+_MAX_DEPENDENCIES_SHOWN = 30
+# Above this many classes, one flat project doc stops being a useful read —
+# generate_all_modules() / --all-modules is the right tool instead.
+LARGE_PROJECT_CLASS_THRESHOLD = 300
 
 
 @dataclass
 class ProjectDoc:
     project: str
     generated_at: str
+    scope: str | None             # module/package prefix this doc is scoped to, if any
     purpose: str
     purpose_source: str          # "llm" | "heuristic"
     counts: dict = field(default_factory=dict)
     architecture: Architecture | None = None
     packages: list[dict] = field(default_factory=list)
+    packages_total: int = 0
     key_classes: dict[str, list[dict]] = field(default_factory=dict)   # layer -> classes
+    key_classes_total: int = 0
     sql_summary: dict = field(default_factory=dict)
     dynamic_sql_summary: dict = field(default_factory=dict)
     config: list[dict] = field(default_factory=list)
+    config_total: int = 0
     dependencies: list[dict] = field(default_factory=list)
+    dependencies_total: int = 0
     hotspots: list[str] = field(default_factory=list)
+    is_large: bool = False        # True => a single doc could not show everything
 
     def as_dict(self) -> dict:
         return {
             "project": self.project,
             "generated_at": self.generated_at,
+            "scope": self.scope,
             "purpose": self.purpose,
             "purpose_source": self.purpose_source,
             "counts": self.counts,
             "architecture": self.architecture.as_dict() if self.architecture else None,
             "packages": self.packages,
+            "packages_total": self.packages_total,
             "key_classes": self.key_classes,
+            "key_classes_total": self.key_classes_total,
             "sql_summary": self.sql_summary,
             "dynamic_sql_summary": self.dynamic_sql_summary,
             "config": self.config,
+            "config_total": self.config_total,
             "dependencies": self.dependencies,
+            "dependencies_total": self.dependencies_total,
             "hotspots": self.hotspots,
+            "is_large": self.is_large,
         }
 
     def to_markdown(self) -> str:
         c = self.counts
+        title = f"{self.project} — {self.scope}" if self.scope else f"{self.project} — Project Summary"
         lines = [
-            f"# {self.project} — Project Summary",
+            f"# {title}",
             "",
             f"_Generated by CodeXray on {self.generated_at}. Every fact below comes from the "
             f"deterministic index (AST + SQL parser + dependency graph) — re-run after re-indexing "
             f"to refresh._",
             "",
-            "## Purpose",
-            "",
-            self.purpose,
-            "",
-            "## At a glance",
-            "",
-            f"| files | classes | methods | SQL queries | dynamic SQL | tables |",
-            f"|---|---|---|---|---|---|",
+        ]
+        if self.is_large and not self.scope:
+            lines += [
+                f"> **Large codebase** ({c.get('classes', 0)} classes): this project-level document "
+                f"summarises the whole system and cannot show every class/table/config entry. Generate "
+                f"a focused doc per module with `--package <prefix>`, or `--all-modules` for one file "
+                f"per top-level package.",
+                "",
+            ]
+        lines += [
+            "## Purpose", "", self.purpose, "",
+            "## At a glance", "",
+            "| files | classes | methods | SQL queries | dynamic SQL | tables |",
+            "|---|---|---|---|---|---|",
             f"| {c.get('files',0)} | {c.get('classes',0)} | {c.get('methods',0)} | "
             f"{c.get('sql_queries',0)} | {c.get('dynamic_sql',0)} | {c.get('tables',0)} |",
             "",
@@ -92,8 +131,8 @@ class ProjectDoc:
         if self.architecture:
             lines += ["## Architecture", ""]
             for layer, members in self.architecture.layers.items():
-                lines.append(f"- **{layer}**: {', '.join(sorted(members)[:20])}"
-                             + (" …" if len(members) > 20 else ""))
+                lines.append(f"- **{layer}** ({len(members)}): {', '.join(sorted(members)[:20])}"
+                             + (f" _(+{len(members) - 20} more)_" if len(members) > 20 else ""))
             lines.append("")
             lines.append(f"**Entry points:** {', '.join(self.architecture.entry_points) or '_none detected_'}")
             lines.append(f"**Data access:** {', '.join(self.architecture.data_access) or '_none detected_'}")
@@ -105,10 +144,17 @@ class ProjectDoc:
             lines += ["## Modules / Packages", "", "| package | classes |", "|---|---|"]
             for p in self.packages:
                 lines.append(f"| `{p['package']}` | {p['class_count']} |")
+            if self.packages_total > len(self.packages):
+                lines.append(f"| _… {self.packages_total - len(self.packages)} more package(s)_ | |")
             lines.append("")
 
         if self.key_classes:
+            shown = sum(len(v) for v in self.key_classes.values())
             lines += ["## Key classes", ""]
+            if self.key_classes_total > shown:
+                lines.append(f"_Showing {shown} of {self.key_classes_total} classes "
+                             f"(top per layer). Use `--package` to see the rest of a specific module._")
+                lines.append("")
             for layer, classes in self.key_classes.items():
                 lines.append(f"### {layer}")
                 lines.append("")
@@ -119,12 +165,13 @@ class ProjectDoc:
 
         if self.sql_summary:
             s = self.sql_summary
+            n_tables = len(s.get("tables", []))
             lines += [
                 "## SQL architecture", "",
                 f"- {s.get('total', 0)} SQL statements found "
                 f"({s.get('select', 0)} SELECT, {s.get('write', 0)} write, {s.get('ddl', 0)} DDL)",
-                f"- Tables touched: {', '.join(s.get('tables', [])[:25]) or '_none_'}"
-                + (" …" if len(s.get("tables", [])) > 25 else ""),
+                f"- Tables touched ({n_tables}): {', '.join(s.get('tables', [])[:_MAX_TABLES_SHOWN]) or '_none_'}"
+                + (f" _(+{n_tables - _MAX_TABLES_SHOWN} more)_" if n_tables > _MAX_TABLES_SHOWN else ""),
                 "",
             ]
 
@@ -142,14 +189,19 @@ class ProjectDoc:
 
         if self.dependencies:
             lines += ["## External dependencies", "", "| library | imports |", "|---|---|"]
-            for d in self.dependencies[:20]:
+            for d in self.dependencies:
                 lines.append(f"| `{d['name']}` | {d['count']} |")
+            if self.dependencies_total > len(self.dependencies):
+                lines.append(f"| _… {self.dependencies_total - len(self.dependencies)} more_ | |")
             lines.append("")
 
         if self.config:
             lines += ["## Configuration", ""]
-            for entry in self.config[:40]:
+            for entry in self.config:
                 lines.append(f"- `{entry['key']}` = {entry['value']}  _({entry['file']})_")
+            if self.config_total > len(self.config):
+                lines.append(f"- _… {self.config_total - len(self.config)} more entr(y/ies) — see the "
+                             f"Overview tab or query `config_entries` directly_")
             lines.append("")
 
         if self.hotspots:
@@ -165,71 +217,151 @@ class ProjectDocGenerator:
         self.pid = project_id
         self.conn = conn or get_connection()
 
+    # -------------------------------------------------------------- discovery
+    def list_modules(self, depth: int = 2) -> list[dict]:
+        """Distinct module prefixes (first `depth` package segments) with class
+        counts — use to decide what to pass as `package_prefix`, or drive
+        `generate_all_modules()`."""
+        rows = self.conn.execute(
+            "SELECT package, COUNT(*) AS n FROM classes WHERE project_id=? AND package IS NOT NULL "
+            "GROUP BY package", (self.pid,),
+        ).fetchall()
+        mods: dict[str, int] = {}
+        for r in rows:
+            prefix = ".".join(r["package"].split(".")[:depth]) or r["package"]
+            mods[prefix] = mods.get(prefix, 0) + r["n"]
+        return sorted(({"module": k, "class_count": v} for k, v in mods.items()), key=lambda d: -d["class_count"])
+
+    def generate_all_modules(self, out_dir: str | Path, *, depth: int = 2, use_llm: bool = False) -> list[Path]:
+        """Write one Markdown doc per top-level module into `out_dir` — the
+        practical answer for a codebase too large for a single summary."""
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        written = []
+        for m in self.list_modules(depth=depth):
+            doc = self.generate(package_prefix=m["module"], use_llm=use_llm)
+            safe = m["module"].replace("/", "_").replace("\\", "_")
+            path = out / f"{safe}.md"
+            path.write_text(doc.to_markdown())
+            written.append(path)
+        return written
+
     # ------------------------------------------------------------------ build
-    def generate(self, *, use_llm: bool = False) -> ProjectDoc:
+    def generate(self, *, use_llm: bool = False, package_prefix: str | None = None) -> ProjectDoc:
         c = self.conn
         proj = c.execute("SELECT name FROM projects WHERE id=?", (self.pid,)).fetchone()
         name = proj["name"] if proj else str(self.pid)
+        scope = self._scope(package_prefix)
 
-        counts = self._counts()
+        counts = self._counts(scope)
         arch = ArchitectureExtractor(c).extract(self.pid)
-        packages = self._packages()
-        key_classes = self._key_classes(arch)
-        sql_summary = self._sql_summary()
-        dyn_summary = self._dynamic_sql_summary()
-        config = self._config()
-        deps = self._dependencies()
-        hotspots = self._hotspots(dyn_summary)
+        if scope:
+            arch.components = [comp for comp in arch.components if comp.name in scope["classes"]]
 
-        purpose, source = self._purpose(name, arch, sql_summary, use_llm=use_llm)
+        packages = self._packages(scope)
+        key_classes, key_total = self._key_classes(arch)
+        sql_summary = self._sql_summary(scope)
+        dyn_summary = self._dynamic_sql_summary(scope)
+        config = self._config()
+        deps = self._dependencies(scope)
+        hotspots = self._hotspots(scope, dyn_summary)
+
+        purpose, source = self._purpose(name, arch, sql_summary, use_llm=use_llm, scope=package_prefix)
 
         return ProjectDoc(
             project=name,
             generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            scope=package_prefix,
             purpose=purpose,
             purpose_source=source,
             counts=counts,
             architecture=arch,
-            packages=packages,
+            packages=packages["shown"],
+            packages_total=packages["total"],
             key_classes=key_classes,
+            key_classes_total=key_total,
             sql_summary=sql_summary,
             dynamic_sql_summary=dyn_summary,
-            config=config,
-            dependencies=deps,
+            config=config["shown"],
+            config_total=config["total"],
+            dependencies=deps["shown"],
+            dependencies_total=deps["total"],
             hotspots=hotspots,
+            is_large=(counts.get("classes", 0) > LARGE_PROJECT_CLASS_THRESHOLD and not package_prefix),
         )
 
-    # --------------------------------------------------------------- sections
-    def _counts(self) -> dict:
-        c = self.conn
-
-        def n(table: str) -> int:
-            return c.execute(f"SELECT COUNT(*) FROM {table} WHERE project_id=?", (self.pid,)).fetchone()[0]
-
-        tables = c.execute(
-            "SELECT COUNT(DISTINCT t.name) FROM sql_tables t JOIN sql_queries q ON q.id=t.query_id "
-            "WHERE q.project_id=?", (self.pid,)
-        ).fetchone()[0]
+    # ------------------------------------------------------------------ scope
+    def _scope(self, package_prefix: str | None) -> dict | None:
+        """Resolve a package prefix to the concrete classes/files it covers.
+        NOTE: like the rest of CodeXray's graph, this matches by simple class
+        name — a project with two different classes sharing a name across
+        packages will see both in an unscoped doc; scoping by package narrows
+        that to the classes actually declared under the prefix."""
+        if not package_prefix:
+            return None
+        rows = self.conn.execute(
+            "SELECT name, package, file_id FROM classes WHERE project_id=? AND package LIKE ?",
+            (self.pid, f"{package_prefix}%"),
+        ).fetchall()
         return {
-            "files": n("files"), "classes": n("classes"), "methods": n("methods"),
-            "sql_queries": n("sql_queries"), "dynamic_sql": n("dynamic_sql"), "tables": tables,
+            "classes": {r["name"] for r in rows},
+            "file_ids": {r["file_id"] for r in rows},
+            "packages": {r["package"] for r in rows},
         }
 
-    def _packages(self) -> list[dict]:
+    # --------------------------------------------------------------- sections
+    def _counts(self, scope: dict | None) -> dict:
+        c = self.conn
+        if scope is None:
+            def n(table: str) -> int:
+                return c.execute(f"SELECT COUNT(*) FROM {table} WHERE project_id=?", (self.pid,)).fetchone()[0]
+            tables = c.execute(
+                "SELECT COUNT(DISTINCT t.name) FROM sql_tables t JOIN sql_queries q ON q.id=t.query_id "
+                "WHERE q.project_id=?", (self.pid,)
+            ).fetchone()[0]
+            return {"files": n("files"), "classes": n("classes"), "methods": n("methods"),
+                    "sql_queries": n("sql_queries"), "dynamic_sql": n("dynamic_sql"), "tables": tables}
+
+        classes = scope["classes"]
+        method_count = sum(
+            1 for r in c.execute(
+                "SELECT c.name AS cn FROM methods m LEFT JOIN classes c ON c.id=m.class_id WHERE m.project_id=?",
+                (self.pid,))
+            if r["cn"] in classes
+        )
+        sql_q = c.execute(
+            "SELECT COUNT(*) FROM sql_queries WHERE project_id=? AND source_class IN "
+            f"({','.join('?' * len(classes))})", (self.pid, *classes),
+        ).fetchone()[0] if classes else 0
+        dyn = c.execute(
+            "SELECT COUNT(*) FROM dynamic_sql WHERE project_id=? AND source_class IN "
+            f"({','.join('?' * len(classes))})", (self.pid, *classes),
+        ).fetchone()[0] if classes else 0
+        tables = c.execute(
+            "SELECT COUNT(DISTINCT t.name) FROM sql_tables t JOIN sql_queries q ON q.id=t.query_id "
+            f"WHERE q.project_id=? AND q.source_class IN ({','.join('?' * len(classes))})",
+            (self.pid, *classes),
+        ).fetchone()[0] if classes else 0
+        return {"files": len(scope["file_ids"]), "classes": len(classes), "methods": method_count,
+                "sql_queries": sql_q, "dynamic_sql": dyn, "tables": tables}
+
+    def _packages(self, scope: dict | None) -> dict:
         rows = self.conn.execute(
             "SELECT package, COUNT(*) AS n FROM classes WHERE project_id=? AND package IS NOT NULL "
             "GROUP BY package ORDER BY n DESC", (self.pid,)
         ).fetchall()
-        return [{"package": r["package"], "class_count": r["n"]} for r in rows]
+        if scope:
+            rows = [r for r in rows if r["package"] in scope["packages"]]
+        all_pkgs = [{"package": r["package"], "class_count": r["n"]} for r in rows]
+        return {"shown": all_pkgs[:_MAX_PACKAGES_SHOWN], "total": len(all_pkgs)}
 
-    def _key_classes(self, arch: Architecture) -> dict[str, list[dict]]:
+    def _key_classes(self, arch: Architecture) -> tuple[dict[str, list[dict]], int]:
         summaries = {
             r["qualified"]: r["summary"] for r in self.conn.execute(
                 "SELECT qualified, summary FROM method_summaries WHERE project_id=?", (self.pid,))
         }
         by_layer: dict[str, list[dict]] = {}
         for comp in arch.components:
-            # a light class-level purpose: the first non-constructor method's summary
             purpose = None
             for q, s in summaries.items():
                 cls, _, method = q.rpartition(".")
@@ -239,21 +371,29 @@ class ProjectDocGenerator:
             by_layer.setdefault(comp.layer, []).append(
                 {"name": comp.name, "role": comp.role, "purpose": purpose}
             )
-        # keep it readable: cap per layer, prefer classes with a purpose
+        total = sum(len(v) for v in by_layer.values())
         for layer, classes in by_layer.items():
             classes.sort(key=lambda x: x["purpose"] is None)
             by_layer[layer] = classes[:_MAX_KEY_CLASSES_PER_LAYER]
-        return by_layer
+        return by_layer, total
 
-    def _sql_summary(self) -> dict:
+    def _sql_summary(self, scope: dict | None) -> dict:
+        where = "q.project_id=?"
+        params: list = [self.pid]
+        if scope is not None:
+            classes = scope["classes"]
+            if not classes:
+                return {"total": 0, "select": 0, "write": 0, "ddl": 0, "tables": []}
+            where += f" AND q.source_class IN ({','.join('?' * len(classes))})"
+            params += list(classes)
+
         rows = self.conn.execute(
-            "SELECT query_type, COUNT(*) AS n FROM sql_queries WHERE project_id=? GROUP BY query_type",
-            (self.pid,),
+            f"SELECT query_type, COUNT(*) AS n FROM sql_queries q WHERE {where} GROUP BY query_type", params,
         ).fetchall()
         by_type = {r["query_type"]: r["n"] for r in rows}
         tables = [r["name"] for r in self.conn.execute(
-            "SELECT DISTINCT t.name FROM sql_tables t JOIN sql_queries q ON q.id=t.query_id "
-            "WHERE q.project_id=? ORDER BY t.name", (self.pid,))]
+            f"SELECT DISTINCT t.name FROM sql_tables t JOIN sql_queries q ON q.id=t.query_id "
+            f"WHERE {where} ORDER BY t.name", params)]
         return {
             "total": sum(by_type.values()),
             "select": by_type.get("SELECT", 0),
@@ -262,39 +402,64 @@ class ProjectDocGenerator:
             "tables": tables,
         }
 
-    def _dynamic_sql_summary(self) -> dict:
+    def _dynamic_sql_summary(self, scope: dict | None) -> dict:
+        where = "project_id=?"
+        params: list = [self.pid]
+        if scope is not None:
+            classes = scope["classes"]
+            if not classes:
+                return {"total": 0, "metadata_tables": []}
+            where += f" AND source_class IN ({','.join('?' * len(classes))})"
+            params += list(classes)
+
         rows = self.conn.execute(
-            "SELECT resolution_status, COUNT(*) AS n FROM dynamic_sql WHERE project_id=? "
-            "GROUP BY resolution_status", (self.pid,)
+            f"SELECT id, resolution_status FROM dynamic_sql WHERE {where}", params
         ).fetchall()
-        out = {r["resolution_status"]: r["n"] for r in rows}
-        out["total"] = sum(out.values())
+        out: dict = {}
+        for r in rows:
+            out[r["resolution_status"]] = out.get(r["resolution_status"], 0) + 1
+        out["total"] = len(rows)
         meta_tables = set()
-        for d in self.conn.execute("SELECT id FROM dynamic_sql WHERE project_id=?", (self.pid,)):
+        for r in rows:
             for dep in self.conn.execute(
                 "SELECT evidence_json FROM dynamic_sql_dependencies WHERE dynamic_sql_id=? "
-                "AND dependency_type='METADATA_QUERY'", (d["id"],)
+                "AND dependency_type='METADATA_QUERY'", (r["id"],)
             ):
-                import json
                 for e in json.loads(dep["evidence_json"] or "[]"):
                     meta_tables.update(e.get("metadata_tables", []))
         out["metadata_tables"] = sorted(meta_tables)
         return out
 
-    def _config(self) -> list[dict]:
+    def _config(self) -> dict:
+        # Config (.properties/.yaml/…) is not Java-package-scoped, so this stays
+        # project-wide regardless of `package_prefix` — but is always capped.
+        total = self.conn.execute(
+            "SELECT COUNT(*) FROM config_entries WHERE project_id=?", (self.pid,)).fetchone()[0]
         rows = self.conn.execute(
             "SELECT ce.key, ce.value, ce.is_secret, f.path FROM config_entries ce "
-            "JOIN files f ON f.id=ce.file_id WHERE ce.project_id=? ORDER BY ce.key", (self.pid,)
+            "JOIN files f ON f.id=ce.file_id WHERE ce.project_id=? ORDER BY ce.key LIMIT ?",
+            (self.pid, _MAX_CONFIG_SHOWN),
         ).fetchall()
-        return [{"key": r["key"], "value": "***" if r["is_secret"] else r["value"], "file": r["path"]}
-                for r in rows]
+        shown = [{"key": r["key"], "value": "***" if r["is_secret"] else r["value"], "file": r["path"]}
+                 for r in rows]
+        return {"shown": shown, "total": total}
 
-    def _dependencies(self) -> list[dict]:
+    def _dependencies(self, scope: dict | None) -> dict:
         project_packages = {r["package"] for r in self.conn.execute(
             "SELECT DISTINCT package FROM classes WHERE project_id=? AND package IS NOT NULL", (self.pid,))}
-        rows = self.conn.execute(
-            "SELECT imported FROM imports WHERE project_id=? AND is_wildcard=0", (self.pid,)
-        ).fetchall()
+        if scope is not None:
+            if not scope["file_ids"]:
+                return {"shown": [], "total": 0}
+            ph = ",".join("?" * len(scope["file_ids"]))
+            rows = self.conn.execute(
+                f"SELECT imported FROM imports WHERE project_id=? AND is_wildcard=0 AND file_id IN ({ph})",
+                (self.pid, *scope["file_ids"]),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT imported FROM imports WHERE project_id=? AND is_wildcard=0", (self.pid,)
+            ).fetchall()
+
         counts: dict[str, int] = {}
         for r in rows:
             imp = r["imported"]
@@ -303,12 +468,11 @@ class ProjectDocGenerator:
             parts = imp.split(".")
             top = ".".join(parts[:2]) if len(parts) > 1 else imp
             counts[top] = counts.get(top, 0) + 1
-        return sorted(({"name": k, "count": v} for k, v in counts.items()), key=lambda d: -d["count"])
+        all_deps = sorted(({"name": k, "count": v} for k, v in counts.items()), key=lambda d: -d["count"])
+        return {"shown": all_deps[:_MAX_DEPENDENCIES_SHOWN], "total": len(all_deps)}
 
-    def _hotspots(self, dyn_summary: dict) -> list[str]:
+    def _hotspots(self, scope: dict | None, dyn_summary: dict) -> list[str]:
         out: list[str] = []
-        # most-depended-on METHODS DEFINED IN THIS PROJECT (fan-in) — JDBC/stdlib
-        # calls (bare names like `executeQuery`) are excluded, same as the graph export.
         known_methods = {
             f'{r["cn"]}.{r["mn"]}' for r in self.conn.execute(
                 "SELECT c.name AS cn, m.name AS mn FROM methods m LEFT JOIN classes c ON c.id=m.class_id "
@@ -320,12 +484,15 @@ class ProjectDocGenerator:
         ).fetchall()
         shown = 0
         for r in rows:
-            if r["dst_label"] not in known_methods:
+            label = r["dst_label"]
+            if label not in known_methods:
+                continue
+            if scope is not None and label.split(".")[0] not in scope["classes"]:
                 continue
             if r["n"] >= 3:
-                out.append(f"`{r['dst_label']}` is called from {r['n']} places — check impact before changing it")
+                out.append(f"`{label}` is called from {r['n']} places — check impact before changing it")
                 shown += 1
-            if shown >= 5:
+            if shown >= _MAX_HOTSPOTS_SHOWN:
                 break
 
         if dyn_summary.get("UNRESOLVED"):
@@ -335,17 +502,19 @@ class ProjectDocGenerator:
             out.append(f"{dyn_summary['PARTIALLY_RESOLVED']} dynamic SQL site(s) depend on metadata lookups — "
                        "the physical table/columns are not fixed at compile time")
 
-        failed = self.conn.execute(
-            "SELECT COUNT(*) FROM parse_failures WHERE project_id=?", (self.pid,)).fetchone()[0]
-        if failed:
-            out.append(f"{failed} file(s) failed to parse and are missing from this index — see Overview")
+        if scope is None:
+            failed = self.conn.execute(
+                "SELECT COUNT(*) FROM parse_failures WHERE project_id=?", (self.pid,)).fetchone()[0]
+            if failed:
+                out.append(f"{failed} file(s) failed to parse and are missing from this index — see Overview")
         return out
 
-    def _purpose(self, name: str, arch: Architecture, sql: dict, *, use_llm: bool) -> tuple[str, str]:
+    def _purpose(self, name: str, arch: Architecture, sql: dict, *, use_llm: bool, scope: str | None) -> tuple[str, str]:
+        subject = f"the {scope} module of {name}" if scope else name
         entry = ", ".join(arch.entry_points[:3]) or "no clear entry point detected"
         heuristic = (
-            f"{name} is a Java{'/' if sql.get('total') else ''}"
-            f"{'SQL' if sql.get('total') else ''} application with {len(arch.components)} classes "
+            f"{subject} is a Java{'/' if sql.get('total') else ''}"
+            f"{'SQL' if sql.get('total') else ''} component with {len(arch.components)} classes "
             f"across {len(arch.layers)} layers ({', '.join(arch.layers)}). "
             f"Entry point(s): {entry}. It executes {sql.get('total', 0)} SQL statements against "
             f"{len(sql.get('tables', []))} tables."
@@ -355,17 +524,18 @@ class ProjectDocGenerator:
 
         try:
             from backend.app.config.settings import get_settings
-            from backend.app.llm.provider import LLMUnavailable, get_provider
+            from backend.app.llm.provider import get_provider
             provider = get_provider(get_settings().llm)
             facts = (
-                f"Project: {name}\nLayers: {arch.layers}\nEntry points: {arch.entry_points}\n"
+                f"Subject: {subject}\nLayers: {arch.layers}\nEntry points: {arch.entry_points}\n"
                 f"Data access classes: {arch.data_access}\nSQL: {sql.get('total',0)} statements, "
                 f"tables: {sql.get('tables', [])[:20]}"
             )
             resp = provider.generate(
-                "You write a single tight paragraph (3-5 sentences) describing what a Java project "
-                "does, for a project-summary document. Use ONLY the facts given. No headers, no lists, "
-                "no markdown, plain prose. Do not invent business purpose beyond what the facts support.",
+                "You write a single tight paragraph (3-5 sentences) describing what a Java "
+                "project or module does, for a summary document. Use ONLY the facts given. No "
+                "headers, no lists, no markdown, plain prose. Do not invent business purpose "
+                "beyond what the facts support.",
                 f"Facts:\n{facts}\n\nWrite the paragraph.",
                 temperature=0.1, max_tokens=220,
             )
