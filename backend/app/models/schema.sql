@@ -319,3 +319,18 @@ CREATE TABLE IF NOT EXISTS method_summaries (
     UNIQUE (project_id, qualified)
 );
 CREATE INDEX IF NOT EXISTS idx_msum_q ON method_summaries(project_id, qualified);
+
+-- Per-class technical design documents, generated on demand (not during a
+-- normal index run) — see scripts/generate_class_docs.py. Fed into the
+-- semantic chunker (chunk_type='class_doc') so Chat/Ask/Search can cite them.
+CREATE TABLE IF NOT EXISTS class_docs (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id     INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    class_id       INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+    package        TEXT,
+    markdown       TEXT NOT NULL,
+    purpose_source TEXT NOT NULL DEFAULT 'heuristic',   -- llm | heuristic
+    generated_at   TEXT NOT NULL,
+    UNIQUE (project_id, class_id)
+);
+CREATE INDEX IF NOT EXISTS idx_class_docs_pkg ON class_docs(project_id, package);

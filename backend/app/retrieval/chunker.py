@@ -32,7 +32,7 @@ _DOC_SECTION_CHARS = 1400
 class Chunk:
     project_id: int
     file: str
-    chunk_type: str          # class | method | sql | dynamic_sql | config | doc
+    chunk_type: str          # class | method | sql | dynamic_sql | config | doc | class_doc
     symbol: str
     line_start: int | None
     line_end: int | None
@@ -52,6 +52,7 @@ class Chunker:
         out += self._dynamic_sql(project_id)
         out += self._config(project_id)
         out += self._docs(project_id)
+        out += self._class_docs(project_id)
         return [c for c in out if c.content.strip()]
 
     # ------------------------------------------------------------------ code
@@ -156,5 +157,21 @@ class Chunker:
             for i in range(0, len(text), _DOC_SECTION_CHARS):
                 section = text[i:i + _DOC_SECTION_CHARS]
                 out.append(Chunk(pid, r["path"], "doc", f'{r["path"]}#{i // _DOC_SECTION_CHARS}',
+                                 None, None, section))
+        return out
+
+    # ------------------------------------------------------------- class_doc
+    def _class_docs(self, pid: int) -> list[Chunk]:
+        out = []
+        for r in self.conn.execute(
+            "SELECT cd.markdown, cd.package, c.name AS class_name, c.fully_qualified_name AS fqn, f.path "
+            "FROM class_docs cd JOIN classes c ON c.id=cd.class_id JOIN files f ON f.id=c.file_id "
+            "WHERE cd.project_id=?", (pid,),
+        ):
+            symbol = r["fqn"] or f'{r["package"]}.{r["class_name"]}'
+            text = r["markdown"] or ""
+            for i in range(0, len(text), _DOC_SECTION_CHARS):
+                section = text[i:i + _DOC_SECTION_CHARS]
+                out.append(Chunk(pid, r["path"], "class_doc", f'{symbol}#{i // _DOC_SECTION_CHARS}',
                                  None, None, section))
         return out
