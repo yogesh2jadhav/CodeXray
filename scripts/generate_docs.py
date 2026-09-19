@@ -77,7 +77,7 @@ def main() -> int:
 
     stem = f"{doc.project}-{args.package}" if args.package else f"{doc.project}-summary"
     out = Path(args.out or f"{stem}.md")
-    out.write_text(doc.to_markdown())
+    out.write_text(doc.to_markdown(), encoding="utf-8")
     print(f"wrote {out}  (purpose: {doc.purpose_source}"
           f"{', scope=' + args.package if args.package else ''})")
     return 0

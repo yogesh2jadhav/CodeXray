@@ -242,7 +242,7 @@ class ProjectDocGenerator:
             doc = self.generate(package_prefix=m["module"], use_llm=use_llm)
             safe = m["module"].replace("/", "_").replace("\\", "_")
             path = out / f"{safe}.md"
-            path.write_text(doc.to_markdown())
+            path.write_text(doc.to_markdown(), encoding="utf-8")
             written.append(path)
         return written
 

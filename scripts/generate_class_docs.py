@@ -87,7 +87,7 @@ def main() -> int:
             if out_dir:
                 pkg_dir = out_dir / (doc.package or "_default").replace(".", "/")
                 pkg_dir.mkdir(parents=True, exist_ok=True)
-                (pkg_dir / f"{doc.name}.md").write_text(doc.to_markdown())
+                (pkg_dir / f"{doc.name}.md").write_text(doc.to_markdown(), encoding="utf-8")
             done += 1
             if doc.purpose_source == "llm":
                 llm_count += 1
